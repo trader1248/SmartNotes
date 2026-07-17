@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Article Tree</title>
+<style>
+  :root{
+    --bg:#141210;
+    --bg-soft:#1b1815;
+    --gold:#c9a24b;
+    --gold-dim:#8a7136;
+    --gold-faint:#4a3d22;
+    --text:#e9e2d2;
+    --text-dim:#9a917d;
+    --border:var(--gold-dim);
+    --font:Helvetica, "Helvetica Neue", Arial, "PingFang TC", sans-serif;
+    --fsize:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font);
+    font-size:var(--fsize);
+    line-height:1.55;
+    display:flex;
+    flex-direction:column;
+  }
+  /* ---------- Tree area ---------- */
+  #treeWrap{
+    flex:1;
+    overflow:auto;
+    padding:16px 20px 24px 14px;
+  }
+  .node{margin:1px 0}
+  .children{
+    margin-left:9px;
+    padding-left:12px;
+    border-left:1px solid var(--gold-faint);
+  }
+  .row{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    padding:1px 4px;
+    border:1px solid transparent;
+    border-radius:2px;
+  }
+  .row:hover{border-color:var(--gold-faint);background:var(--bg-soft)}
+  .row.drag-over-inside{border-color:var(--gold);background:#221d14}
+  .row.drag-over-before{border-top-color:var(--gold)}
+  .row.drag-over-after{border-bottom-color:var(--gold)}
+  .caret{
+    width:14px;height:14px;
+    flex:none;
+    cursor:pointer;
+    color:var(--gold);
+    display:flex;align-items:center;justify-content:center;
+    user-select:none;
+    font-size:9px;
+    transition:transform .12s;
+  }
+  .caret.open{transform:rotate(90deg)}
+  .icon{flex:none;color:var(--gold-dim);font-size:10px;user-select:none}
+  .title{
+    cursor:text;
+    padding:0 3px;
+    min-width:40px;
+    max-width:60ch;
+    white-space:pre-wrap;
+    outline:none;
+  }
+  .title:focus{border-bottom:1px solid var(--gold);background:var(--bg-soft)}
+  .title.folder-title{color:var(--gold);letter-spacing:.02em}
+  .acts{
+    display:none;
+    gap:2px;
+    margin-left:2px;
+  }
+  .row:hover .acts{display:flex}
+  .acts button{
+    background:none;
+    border:1px solid var(--gold-faint);
+    color:var(--text-dim);
+    font-family:var(--font);
+    font-size:10px;
+    line-height:1;
+    padding:2px 5px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  .acts button:hover{color:var(--gold);border-color:var(--gold-dim)}
+  .handle{cursor:grab;color:var(--gold-faint);font-size:10px;padding:0 2px;user-select:none}
+  .handle:hover{color:var(--gold)}
+  /* ---------- Card body ---------- */
+  .cardBody{
+    margin:2px 0 4px 19px;
+    border:1px solid var(--gold-faint);
+    border-radius:2px;
+    background:var(--bg-soft);
+    max-width:72ch;
+  }
+  .toolbar{
+    display:flex;
+    gap:2px;
+    padding:3px 5px;
+    border-bottom:1px solid var(--gold-faint);
+  }
+  .toolbar button{
+    background:none;
+    border:1px solid transparent;
+    color:var(--text-dim);
+    font-family:var(--font);
+    font-size:10px;
+    padding:2px 6px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  .toolbar button:hover{color:var(--gold);border-color:var(--gold-faint)}
+  .toolbar button b,.toolbar button i,.toolbar button u{pointer-events:none}
+  .content{
+    padding:6px 9px;
+    min-height:2.4em;
+    outline:none;
+  }
+  .content:empty::before{content:"內容⋯";color:var(--text-dim);opacity:.5}
+  .content ul{margin:2px 0 2px 1.3em}
+  .content li{margin:1px 0}
+  /* ---------- Bottom control bar ---------- */
+  #controls{
+    flex:none;
+    border-top:1px solid var(--border);
+    background:var(--bg-soft);
+    padding:6px 14px 8px;
+  }
+  .ctlRow{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:3px 0;
+  }
+  .ctlRow .lbl{color:var(--text-dim);font-size:10px;text-transform:uppercase;letter-spacing:.08em;min-width:44px}
+  .ctlRow button,.ctlRow select{
+    background:var(--bg);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--font);
+    font-size:11px;
+    padding:3px 10px;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  .ctlRow button:hover{border-color:var(--gold);color:var(--gold)}
+  .ctlRow select:hover{border-color:var(--gold)}
+  .ctlRow input[type=color]{
+    width:26px;height:22px;
+    padding:1px;
+    border:1px solid var(--border);
+    border-radius:2px;
+    background:var(--bg);
+    cursor:pointer;
+  }
+  #dirty{color:var(--gold);font-size:10px;margin-left:auto;opacity:0;transition:opacity .2s}
+  #dirty.on{opacity:1}
+  #fileInput{display:none}
+</style>
+</head>
+<body>
+
+<div id="treeWrap"></div>
+
+<div id="controls">
+  <div class="ctlRow">
+    <span class="lbl">檔案</span>
+    <button id="btnExport">Export JSON</button>
+    <button id="btnImport">Import JSON</button>
+    <button id="btnReset">Reset</button>
+    <input type="file" id="fileInput" accept=".json,application/json">
+    <span id="dirty">● 未儲存變更 — 請 Export</span>
+  </div>
+  <div class="ctlRow">
+    <span class="lbl">樣式</span>
+    <select id="selFont">
+      <option value='Helvetica, "Helvetica Neue", Arial, "PingFang TC", sans-serif'>Helvetica</option>
+      <option value='Georgia, "Songti TC", serif'>Georgia / 宋體</option>
+      <option value='"Courier New", monospace'>Courier</option>
+      <option value='"PingFang TC", "Microsoft JhengHei", sans-serif'>PingFang TC</option>
+      <option value='"Times New Roman", "Songti TC", serif'>Times</option>
+    </select>
+    <select id="selSize">
+      <option>11</option><option selected>12</option><option>13</option>
+      <option>14</option><option>16</option><option>18</option>
+    </select>
+    <input type="color" id="selBorder" value="#8a7136" title="Border colour">
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- State ---------- */
+let uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+function freshState(){
+  return {
+    settings:{
+      font:'Helvetica, "Helvetica Neue", Arial, "PingFang TC", sans-serif',
+      size:"12",
+      border:"#8a7136"
+    },
+    tree:{
+      id:uid(), type:"folder", title:"Root", collapsed:false, children:[]
+    }
+  };
+}
+
+let state = freshState();
+let dirty = false;
+let draggedId = null;
+
+function markDirty(){
+  dirty = true;
+  document.getElementById("dirty").classList.add("on");
+}
+function clearDirty(){
+  dirty = false;
+  document.getElementById("dirty").classList.remove("on");
+}
+window.addEventListener("beforeunload", e => {
+  if(dirty){ e.preventDefault(); e.returnValue = ""; }
+});
+
+/* ---------- Tree helpers ---------- */
+function findNode(node, id, parent=null){
+  if(node.id === id) return {node, parent};
+  if(node.children){
+    for(const c of node.children){
+      const r = findNode(c, id, node);
+      if(r) return r;
+    }
+  }
+  return null;
+}
+function isDescendant(ancestor, id){
+  if(!ancestor.children) return false;
+  for(const c of ancestor.children){
+    if(c.id === id || isDescendant(c, id)) return true;
+  }
+  return false;
+}
+
+/* ---------- Rendering ---------- */
+const wrap = document.getElementById("treeWrap");
+
+function render(){
+  wrap.innerHTML = "";
+  wrap.appendChild(renderNode(state.tree, true));
+}
+
+function renderNode(n, isRoot){
+  const el = document.createElement("div");
+  el.className = "node";
+  el.dataset.id = n.id;
+
+  const row = document.createElement("div");
+  row.className = "row";
+  row.dataset.id = n.id;
+
+  /* caret */
+  const caret = document.createElement("span");
+  caret.className = "caret" + (n.collapsed ? "" : " open");
+  const hasBody = n.type === "card" || (n.children && true);
+  caret.textContent = "▶";
+  caret.title = n.collapsed ? "展開" : "收合";
+  caret.onclick = () => { n.collapsed = !n.collapsed; markDirty(); render(); };
+  row.appendChild(caret);
+
+  /* icon */
+  const icon = document.createElement("span");
+  icon.className = "icon";
+  icon.textContent = n.type === "folder" ? "◆" : "▪";
+  row.appendChild(icon);
+
+  /* title (click to edit) */
+  const title = document.createElement("span");
+  title.className = "title" + (n.type === "folder" ? " folder-title" : "");
+  title.textContent = n.title;
+  title.contentEditable = "true";
+  title.spellcheck = false;
+  title.addEventListener("input", () => { n.title = title.textContent; markDirty(); });
+  title.addEventListener("keydown", e => {
+    if(e.key === "Enter"){ e.preventDefault(); title.blur(); }
+  });
+  row.appendChild(title);
+
+  /* actions */
+  const acts = document.createElement("span");
+  acts.className = "acts";
+  if(n.type === "folder"){
+    acts.appendChild(actBtn("+卡", "新增文章卡", () => {
+      n.children.push({id:uid(), type:"card", title:"新文章", content:"", collapsed:false, showToolbar:false});
+      n.collapsed = false; markDirty(); render();
+    }));
+    acts.appendChild(actBtn("+夾", "新增子資料夾", () => {
+      n.children.push({id:uid(), type:"folder", title:"新資料夾", collapsed:false, children:[]});
+      n.collapsed = false; markDirty(); render();
+    }));
+  } else {
+    acts.appendChild(actBtn("Aa", "顯示/隱藏格式列", () => {
+      n.showToolbar = !n.showToolbar; n.collapsed = false; markDirty(); render();
+    }));
+  }
+  if(!isRoot){
+    acts.appendChild(actBtn("×", "刪除", () => {
+      const label = n.type === "folder" ? "資料夾(含其下所有內容)" : "文章卡";
+      if(confirm(`刪除此${label}「${n.title}」?`)){
+        const r = findNode(state.tree, n.id);
+        r.parent.children = r.parent.children.filter(c => c.id !== n.id);
+        markDirty(); render();
+      }
+    }));
+    /* drag handle */
+    const h = document.createElement("span");
+    h.className = "handle";
+    h.textContent = "⠿";
+    h.title = "拖曳以移動";
+    h.draggable = true;
+    h.addEventListener("dragstart", e => {
+      draggedId = n.id;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", n.id);
+    });
+    acts.appendChild(h);
+  }
+  row.appendChild(acts);
+
+  /* drop target behaviour */
+  row.addEventListener("dragover", e => {
+    if(!draggedId || draggedId === n.id) return;
+    const src = findNode(state.tree, draggedId);
+    if(!src || isDescendant(src.node, n.id)) return;
+    e.preventDefault();
+    const rect = row.getBoundingClientRect();
+    const y = (e.clientY - rect.top) / rect.height;
+    row.classList.remove("drag-over-inside","drag-over-before","drag-over-after");
+    if(n.type === "folder" && y > 0.3 && y < 0.7){
+      row.classList.add("drag-over-inside");
+    } else if(y <= 0.5){
+      if(!isRoot) row.classList.add("drag-over-before");
+    } else {
+      if(!isRoot) row.classList.add("drag-over-after");
+    }
+  });
+  row.addEventListener("dragleave", () => {
+    row.classList.remove("drag-over-inside","drag-over-before","drag-over-after");
+  });
+  row.addEventListener("drop", e => {
+    e.preventDefault();
+    const mode = row.classList.contains("drag-over-inside") ? "inside"
+               : row.classList.contains("drag-over-before") ? "before"
+               : row.classList.contains("drag-over-after") ? "after" : null;
+    row.classList.remove("drag-over-inside","drag-over-before","drag-over-after");
+    if(!mode || !draggedId || draggedId === n.id) return;
+    const src = findNode(state.tree, draggedId);
+    if(!src || isDescendant(src.node, n.id)) return;
+    /* detach */
+    src.parent.children = src.parent.children.filter(c => c.id !== draggedId);
+    if(mode === "inside"){
+      n.children.push(src.node);
+      n.collapsed = false;
+    } else {
+      const tgt = findNode(state.tree, n.id);
+      const idx = tgt.parent.children.findIndex(c => c.id === n.id);
+      tgt.parent.children.splice(mode === "before" ? idx : idx + 1, 0, src.node);
+    }
+    draggedId = null;
+    markDirty(); render();
+  });
+
+  el.appendChild(row);
+
+  /* body */
+  if(!n.collapsed){
+    if(n.type === "card"){
+      el.appendChild(renderCardBody(n));
+    } else if(n.children.length){
+      const kids = document.createElement("div");
+      kids.className = "children";
+      n.children.forEach(c => kids.appendChild(renderNode(c, false)));
+      el.appendChild(kids);
+    }
+  }
+  return el;
+}
+
+function actBtn(label, tip, fn){
+  const b = document.createElement("button");
+  b.textContent = label;
+  b.title = tip;
+  b.onclick = fn;
+  return b;
+}
+
+function renderCardBody(n){
+  const body = document.createElement("div");
+  body.className = "cardBody";
+
+  if(n.showToolbar){
+    const tb = document.createElement("div");
+    tb.className = "toolbar";
+    const cmds = [
+      ["<b>B</b>","bold","粗體"],
+      ["<i>I</i>","italic","斜體"],
+      ["<u>U</u>","underline","底線"],
+      ["• 列表","insertUnorderedList","項目符號"],
+      ["清除","removeFormat","清除格式"]
+    ];
+    cmds.forEach(([html,cmd,tip]) => {
+      const b = document.createElement("button");
+      b.innerHTML = html;
+      b.title = tip;
+      b.addEventListener("mousedown", e => {
+        e.preventDefault(); /* keep selection */
+        document.execCommand(cmd, false, null);
+        markDirty();
+      });
+      tb.appendChild(b);
+    });
+    body.appendChild(tb);
+  }
+
+  const c = document.createElement("div");
+  c.className = "content";
+  c.contentEditable = "true";
+  c.spellcheck = false;
+  c.innerHTML = n.content || "";
+  c.addEventListener("input", () => { n.content = c.innerHTML; markDirty(); });
+  body.appendChild(c);
+  return body;
+}
+
+/* ---------- Settings ---------- */
+const selFont = document.getElementById("selFont");
+const selSize = document.getElementById("selSize");
+const selBorder = document.getElementById("selBorder");
+
+function applySettings(){
+  const s = state.settings;
+  document.documentElement.style.setProperty("--font", s.font);
+  document.documentElement.style.setProperty("--fsize", s.size + "px");
+  document.documentElement.style.setProperty("--border", s.border);
+  selFont.value = s.font;
+  selSize.value = s.size;
+  selBorder.value = s.border;
+}
+selFont.onchange = () => { state.settings.font = selFont.value; markDirty(); applySettings(); };
+selSize.onchange = () => { state.settings.size = selSize.value; markDirty(); applySettings(); };
+selBorder.oninput = () => { state.settings.border = selBorder.value; markDirty(); applySettings(); };
+
+/* ---------- File system ---------- */
+document.getElementById("btnExport").onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  const pad = x => String(x).padStart(2,"0");
+  a.download = `article-tree-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  clearDirty();
+};
+
+const fileInput = document.getElementById("fileInput");
+document.getElementById("btnImport").onclick = () => {
+  if(dirty && !confirm("目前有未儲存變更,匯入將會覆蓋。繼續?")) return;
+  fileInput.value = "";
+  fileInput.click();
+};
+fileInput.onchange = () => {
+  const f = fileInput.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const data = JSON.parse(r.result);
+      if(!data.tree || data.tree.type !== "folder") throw new Error("結構不符");
+      state = { settings: Object.assign(freshState().settings, data.settings || {}), tree: data.tree };
+      clearDirty();
+      applySettings();
+      render();
+    }catch(err){
+      alert("匯入失敗:JSON 格式不正確。\n" + err.message);
+    }
+  };
+  r.readAsText(f);
+};
+
+document.getElementById("btnReset").onclick = () => {
+  if(confirm("清除所有內容並重新開始?此動作無法復原(除非你已 Export)。")){
+    state = freshState();
+    clearDirty();
+    applySettings();
+    render();
+  }
+};
+
+/* ---------- Init ---------- */
+applySettings();
+render();
+})();
+</script>
+</body>
+</html>
