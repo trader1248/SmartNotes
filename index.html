@@ -2,434 +2,527 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>文章卡片樹</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js"
+        onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';document.head.appendChild(s);"></script>
 <style>
 :root{
-  --gold:#C9A45C;
-  --gold-dim:rgba(201,164,92,.35);
-  --gold-halo:rgba(201,164,92,.22);
-  --bg:#161310;
-  --bg-card:#1C1814;
-  --ink:#E8E2D6;
-  --ink-dim:#9A9082;
-  --fs:12px;
-  --ff:"PingFang TC","PingFang SC","Heiti TC",-apple-system,sans-serif;
+  --bg:#14120e; --panel:#1b1813; --gold:#d4af37; --gold-dim:#8a7327;
+  --line:#3d3624; --text:#e9e2d0; --muted:#8d8468;
+  --font:'PingFang TC','PingFang HK','Microsoft JhengHei',sans-serif;
+  --fs:12px; --indent:18px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{
-  background:var(--bg);
-  color:var(--ink);
-  font-family:var(--ff);
-  font-size:var(--fs);
-  line-height:1.6;
-}
-#app{max-width:860px;padding:20px 16px 110px 20px}
+html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:var(--fs);line-height:1.35}
+body{min-height:100vh;display:flex;flex-direction:column}
 
-/* ---------- tree rows ---------- */
-.node{position:relative}
-.row{
-  display:flex;align-items:center;gap:6px;
-  padding:2px 4px;border-radius:4px;
-  min-height:22px;
-}
-.row.drag-over-into{outline:1px solid var(--gold);outline-offset:-1px;background:rgba(201,164,92,.08)}
-.row.drag-over-before{box-shadow:0 -1px 0 var(--gold)}
-.row.drag-over-after{box-shadow:0 1px 0 var(--gold)}
-.children{margin-left:18px}
+/* ---------- header ---------- */
+header{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)}
+header .app{font-weight:600;color:var(--gold);letter-spacing:.5px}
+header .sp{flex:1}
+#dot{width:9px;height:9px;border-radius:50%;background:#666;flex:none;transition:background .2s}
+#dot.ok{background:#4caf6d;box-shadow:0 0 4px #4caf6d}
+#dot.sync{background:var(--gold);box-shadow:0 0 5px var(--gold)}
+#dot.err{background:#d05045;box-shadow:0 0 5px #d05045}
+#dot.local{background:#777}
+#dotLabel{color:var(--muted);font-size:11px}
 
-/* toggle bullet with halo */
-.bullet{
-  width:16px;height:16px;flex:none;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;border-radius:50%;
-}
-.bullet .dot{
-  width:6px;height:6px;border-radius:50%;
-  background:var(--gold);
-  transition:box-shadow .15s;
-}
-.bullet.leaf .dot{background:var(--gold-dim)}
-.bullet.closed .dot{box-shadow:0 0 0 4px var(--gold-halo)}
-.bullet:hover .dot{box-shadow:0 0 0 4px var(--gold-halo),0 0 6px var(--gold-dim)}
+/* ---------- tree ---------- */
+main{flex:1;padding:8px 12px 90px;overflow:auto}
+.node{margin:0}
+.kids{margin-left:var(--indent);border-left:1px solid var(--line);padding-left:8px}
+.row{display:flex;align-items:center;gap:6px;padding:1px 2px;border-radius:4px;min-height:20px}
+.row:hover{background:rgba(212,175,55,.05)}
+.tog{width:8px;height:8px;border-radius:50%;background:var(--gold);flex:none;cursor:pointer;transition:box-shadow .15s}
+.tog.halo{box-shadow:0 0 0 3.5px rgba(212,175,55,.18)}
+.tog.leafdot{background:var(--gold-dim)}
+.title{font-weight:700;outline:none;padding:0 2px;border-radius:3px;min-width:1em;white-space:pre-wrap}
+.title:focus{background:rgba(212,175,55,.08)}
+.title:empty:before{content:attr(data-ph);color:var(--muted);font-weight:400}
+.acts{display:flex;gap:2px;opacity:0;transition:opacity .12s;flex:none}
+.row:hover .acts,.row:focus-within .acts{opacity:1}
+.ib{width:18px;height:18px;display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--muted);cursor:pointer;border-radius:3px;padding:0}
+.ib:hover{color:var(--gold);background:rgba(212,175,55,.1)}
+.ib svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.grip{cursor:grab}
 
-.type-ic{flex:none;width:12px;height:12px;color:var(--gold);opacity:.8}
+/* card body */
+.cardbody{margin:2px 0 4px calc(var(--indent) - 4px)}
+.card{border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:5px 8px}
+.toolbar{display:flex;gap:2px;margin-bottom:3px;border-bottom:1px solid var(--line);padding-bottom:3px}
+.toolbar.hide{display:none}
+.tb{min-width:20px;height:18px;border:none;background:none;color:var(--muted);cursor:pointer;border-radius:3px;font-size:11px;padding:0 3px;font-family:var(--font)}
+.tb:hover{color:var(--gold);background:rgba(212,175,55,.1)}
+.rt{outline:none;min-height:1.4em}
+.rt:empty:before{content:'輸入內容…';color:var(--muted)}
+.rt ul,.rt ol{margin-left:calc(var(--indent) + 2px)}
+.rt li{margin:0}
+.rt b,.rt strong{color:#f2e6bf}
 
-.title{
-  font-weight:700;cursor:text;outline:none;
-  padding:0 3px;border-radius:3px;min-width:2em;
-  white-space:pre-wrap;
-}
-.title:focus{background:rgba(201,164,92,.10);box-shadow:0 0 0 1px var(--gold-dim)}
-.title:empty::before{content:"未命名";color:var(--ink-dim);font-weight:400}
+/* drag */
+.drag-over-top{box-shadow:0 -2px 0 var(--gold)}
+.drag-over-bottom{box-shadow:0 2px 0 var(--gold)}
+.drag-over-into{outline:1px dashed var(--gold);outline-offset:-1px}
+.dragging{opacity:.4}
 
-/* hover-only action icons */
-.acts{display:flex;gap:2px;margin-left:4px;opacity:0;transition:opacity .12s}
-.row:hover .acts{opacity:1}
-.ibtn{
-  background:none;border:none;cursor:pointer;color:var(--ink-dim);
-  width:18px;height:18px;border-radius:3px;
-  display:flex;align-items:center;justify-content:center;padding:0;
-}
-.ibtn:hover{color:var(--gold);background:rgba(201,164,92,.12)}
-.ibtn svg{width:11px;height:11px}
-.ibtn.danger:hover{color:#C96A5C}
+/* ---------- footer controls ---------- */
+#ctlToggle{position:fixed;right:10px;bottom:0;z-index:11;border:1px solid var(--line);border-bottom:none;background:var(--panel);color:var(--gold);cursor:pointer;border-radius:6px 6px 0 0;padding:1px 10px;font-size:11px}
+footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:5px 10px 7px;z-index:10}
+footer.hide{display:none}
+.crow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:2px 0}
+.crow+.crow{border-top:1px dashed var(--line)}
+.crow .lab{color:var(--muted);font-size:11px;flex:none}
+.btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:none;color:var(--text);cursor:pointer;border-radius:5px;padding:2px 8px;font-size:11px;font-family:var(--font)}
+.btn:hover{border-color:var(--gold);color:var(--gold)}
+.btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+select,input[type=color]{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:5px;font-size:11px;padding:1px 3px;font-family:var(--font)}
+input[type=color]{width:26px;height:20px;padding:0}
 
-/* ---------- article card ---------- */
-.card{
-  margin:2px 0 6px 30px;
-  border:1px solid var(--gold-dim);
-  border-radius:5px;
-  background:var(--bg-card);
-  padding:6px 8px;
-}
-.card-tools{display:flex;gap:2px;margin-bottom:4px}
-.card-tools.hidden{display:none}
-.card-tools .ibtn{width:20px;height:20px;color:var(--gold)}
-.card-tools .sep{width:1px;background:var(--gold-dim);margin:3px 4px}
-.rich{
-  outline:none;min-height:1.6em;
-  color:var(--ink);
-}
-.rich:empty::before{content:"在此輸入內容⋯";color:var(--ink-dim)}
-.rich ul{margin:2px 0 2px 1.3em}
-.rich li{margin:1px 0}
-.rich b,.rich strong{color:var(--gold)}
-.rich a{color:var(--gold)}
-
-/* ---------- bottom control bar ---------- */
-#bar{
-  position:fixed;left:0;right:0;bottom:0;
-  background:rgba(22,19,16,.96);backdrop-filter:blur(6px);
-  border-top:1px solid var(--gold-dim);
-  padding:6px 16px 8px;
-  display:flex;flex-direction:column;gap:5px;
-  font-size:11px;
-}
-.bar-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.bar-label{color:var(--ink-dim);margin-right:2px}
-.cbtn{
-  display:inline-flex;align-items:center;gap:4px;
-  background:none;color:var(--ink);
-  border:1px solid var(--gold-dim);border-radius:4px;
-  padding:3px 7px;cursor:pointer;font-family:inherit;font-size:11px;
-}
-.cbtn:hover{border-color:var(--gold);color:var(--gold)}
-.cbtn svg{width:11px;height:11px}
-.cbtn.icon-only{padding:3px 5px}
-select,input[type=number]{
-  background:var(--bg-card);color:var(--ink);
-  border:1px solid var(--gold-dim);border-radius:4px;
-  padding:2px 4px;font-family:inherit;font-size:11px;
-}
-input[type=color]{
-  width:24px;height:22px;padding:0;border:1px solid var(--gold-dim);
-  border-radius:4px;background:none;cursor:pointer;
-}
-#dirty{color:var(--gold);margin-left:auto;opacity:0;transition:opacity .2s}
-#dirty.on{opacity:1}
-.hint{color:var(--ink-dim)}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+/* settings pop */
+#cfg{position:fixed;top:34px;right:10px;background:var(--panel);border:1px solid var(--gold-dim);border-radius:6px;padding:8px;z-index:20;display:none;width:260px}
+#cfg.show{display:block}
+#cfg input[type=text],#cfg input[type=password]{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:3px 5px;font-size:11px;margin:2px 0 6px;font-family:monospace}
+#cfg .lab{color:var(--muted);font-size:11px}
 </style>
 </head>
 <body>
-<div id="app"><div id="tree"></div></div>
 
-<div id="bar">
-  <div class="bar-row">
-    <span class="bar-label">檔案</span>
-    <button class="cbtn" id="btnExport" title="匯出 JSON(可選擇儲存位置,例如 iCloud Drive)">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 10V2M5 5l3-3 3 3M2 10v3h12v-3"/></svg>匯出 JSON</button>
-    <button class="cbtn" id="btnImport" title="匯入 JSON(從 iCloud Drive 或本機載入)">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3M2 10v3h12v-3"/></svg>匯入 JSON</button>
-    <button class="cbtn" id="btnText" title="匯出為純文字檔">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 2h10M3 6h10M3 10h7M3 14h5"/></svg>匯出文字</button>
-    <button class="cbtn" id="btnReset" title="清除全部,重新開始">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 4A6 6 0 1 0 14 8M13 1v3h-3"/></svg>重設</button>
-    <span id="dirty" title="有未匯出的變更">● 未匯出</span>
-  </div>
-  <div class="bar-row">
-    <span class="bar-label">樣式</span>
-    <select id="selFont" title="字體">
-      <option value='"PingFang TC","PingFang SC","Heiti TC",-apple-system,sans-serif'>PingFang TC</option>
-      <option value='"Songti TC","Songti SC",serif'>宋體</option>
-      <option value='"Kaiti TC","Kaiti SC",serif'>楷體</option>
-      <option value='Georgia,serif'>Georgia</option>
-      <option value='Menlo,monospace'>Menlo</option>
-    </select>
-    <input type="number" id="numSize" min="10" max="22" step="1" value="12" title="字級" style="width:44px">
-    <input type="color" id="colGold" value="#C9A45C" title="線條/邊框顏色">
-    <span class="bar-label" style="margin-left:10px">展開</span>
-    <button class="cbtn icon-only" id="ex1" title="展開 1 層">1</button>
-    <button class="cbtn icon-only" id="ex2" title="展開 2 層">2</button>
-    <button class="cbtn icon-only" id="ex3" title="展開 3 層">3</button>
-    <button class="cbtn icon-only" id="exAll" title="展開全部">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4M4 1l4 4 4-4" transform="translate(0,2)"/></svg></button>
-    <button class="cbtn icon-only" id="coAll" title="收合全部">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10l4-4 4 4M4 15l4-4 4 4" transform="translate(0,-2)"/></svg></button>
-  </div>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="14" x2="13" y2="14"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-fmt" viewBox="0 0 24 24"><path d="M6 20 12 4l6 16M8.5 14h7"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></symbol>
+  <symbol id="i-ul" viewBox="0 0 24 24"><path d="M3 21V3m18 4L9 7m12 5H9m12 5H9"/></symbol>
+  <symbol id="i-txt" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM12 4v4m0 2v2m0 2v2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></symbol>
+  <symbol id="i-exp" viewBox="0 0 24 24"><path d="M7 9l5 5 5-5"/></symbol>
+  <symbol id="i-col" viewBox="0 0 24 24"><path d="M7 15l5-5 5 5"/></symbol>
+</svg>
+
+<header>
+  <span class="app">文章卡片樹</span>
+  <span class="sp"></span>
+  <span id="dotLabel">本機</span><span id="dot" class="local" title="同步狀態"></span>
+  <button class="ib" id="btnCfg" title="Supabase 設定"><svg><use href="#i-gear"/></svg></button>
+</header>
+
+<div id="cfg">
+  <div class="lab">Supabase URL</div>
+  <input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co">
+  <div class="lab">Anon Key</div>
+  <input type="password" id="cfgKey" placeholder="eyJhbGciOi...">
+  <div class="lab" style="margin-bottom:6px">需先建表:create table article_tree (id text primary key, data jsonb, updated_at timestamptz);並設 RLS 政策。留空 = 只用本機儲存。</div>
+  <button class="btn" id="cfgSave">儲存並連線</button>
 </div>
 
-<input type="file" id="fileIn" accept=".json,application/json" style="display:none">
+<main id="tree"></main>
+
+<button id="ctlToggle" title="顯示/隱藏控制列">⌃ 控制列</button>
+<footer id="controls" class="hide">
+  <div class="crow">
+    <span class="lab">檔案</span>
+    <button class="btn" id="btnExpJson"><svg><use href="#i-dl"/></svg>匯出 JSON</button>
+    <button class="btn" id="btnImpJson"><svg><use href="#i-card"/></svg>匯入 JSON</button>
+    <button class="btn" id="btnExpTxt"><svg><use href="#i-txt"/></svg>匯出文字</button>
+    <button class="btn" id="btnExpMd"><svg><use href="#i-txt"/></svg>匯出 Markdown</button>
+    <button class="btn" id="btnExpOkf"><svg><use href="#i-zip"/></svg>匯出 OKF Bundle</button>
+    <button class="btn" id="btnReset"><svg><use href="#i-reset"/></svg>重設</button>
+    <input type="file" id="fileImp" accept=".json,application/json" style="display:none">
+  </div>
+  <div class="crow">
+    <span class="lab">樣式</span>
+    <select id="selFont">
+      <option value="'PingFang TC','PingFang HK','Microsoft JhengHei',sans-serif">PingFang TC</option>
+      <option value="'Songti TC','Noto Serif TC',serif">Songti TC</option>
+      <option value="'Helvetica Neue',Helvetica,Arial,sans-serif">Helvetica Neue</option>
+      <option value="Georgia,'Times New Roman',serif">Georgia</option>
+      <option value="Menlo,Consolas,monospace">Monospace</option>
+    </select>
+    <select id="selSize"><option>10</option><option>11</option><option selected>12</option><option>13</option><option>14</option><option>16</option></select>
+    <span class="lab">縮排</span>
+    <select id="selIndent"><option>12</option><option>16</option><option selected>18</option><option>22</option><option>26</option><option>32</option></select>
+    <span class="lab">邊框色</span>
+    <input type="color" id="inBorder" value="#3d3624">
+  </div>
+  <div class="crow">
+    <span class="lab">展開</span>
+    <button class="btn" id="ex1" title="展開 1 層"><svg><use href="#i-exp"/></svg>1</button>
+    <button class="btn" id="ex2" title="展開 2 層"><svg><use href="#i-exp"/></svg>2</button>
+    <button class="btn" id="ex3" title="展開 3 層"><svg><use href="#i-exp"/></svg>3</button>
+    <button class="btn" id="exAll" title="展開全部"><svg><use href="#i-exp"/></svg>全部</button>
+    <button class="btn" id="colAll" title="收合全部"><svg><use href="#i-col"/></svg>收合</button>
+  </div>
+</footer>
 
 <script>
-/* ================= data ================= */
-let uid = () => 'n' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
-let root = { id:'root', type:'folder', title:'根目錄', collapsed:false, children:[] };
-let settings = { ff:document.querySelector('#selFont').value, fs:12, gold:'#C9A45C' };
-let dirty = false;
+'use strict';
+/* ============ model ============ */
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+const freshTree = () => ({ id: 'root', type: 'folder', title: '根目錄', collapsed: false, children: [] });
+let tree = freshTree();
 
-function markDirty(v){ dirty = v; document.getElementById('dirty').classList.toggle('on', v);
-  document.title = (v?'● ':'') + '文章卡片樹'; }
-
-function find(node, id, parent){ 
-  if(node.id===id) return {node, parent};
-  for(const c of node.children||[]){ const r=find(c,id,node); if(r) return r; }
+function locate(id, node = tree, parent = null) {
+  if (node.id === id) return { node, parent };
+  for (const c of (node.children || [])) { const r = locate(id, c, node); if (r) return r; }
   return null;
 }
-function isDescendant(anc, id){
-  for(const c of anc.children||[]){ if(c.id===id||isDescendant(c,id)) return true; } return false;
+function isDescendant(ancestor, id) {
+  for (const c of (ancestor.children || [])) { if (c.id === id || isDescendant(c, id)) return true; }
+  return false;
 }
+function walk(node, fn, depth = 0) { fn(node, depth); (node.children || []).forEach(c => walk(c, fn, depth + 1)); }
 
-/* ================= icons ================= */
-const IC = {
-  folder:'<svg class="type-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1.5 3.5h4l1.5 2h7.5v7h-13z"/></svg>',
-  article:'<svg class="type-ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3.5 1.5h6l3 3v10h-9zM9.5 1.5v3h3"/></svg>',
-  addArt:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2h5l3 3v9H4zM10 8H6M8 6v4"/></svg>',
-  addFold:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 3.5h4l1.5 2h7.5v7h-13zM8 7.5v4M6 9.5h4"/></svg>',
-  del:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 10h6.4L12 4M6.5 6.5v5M9.5 6.5v5"/></svg>',
-  fmt:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 13L7 3h2l4 10M4.5 9.5h7"/></svg>'
-};
+/* ============ render ============ */
+const $tree = document.getElementById('tree');
+const icon = n => `<svg><use href="#${n}"/></svg>`;
 
-/* ================= render ================= */
-const treeEl = document.getElementById('tree');
-
-function render(){
-  treeEl.innerHTML = '';
-  treeEl.appendChild(renderNode(root, true));
+function render() {
+  $tree.innerHTML = '';
+  $tree.appendChild(renderNode(tree, 0));
 }
+function renderNode(node, depth) {
+  const wrap = document.createElement('div');
+  wrap.className = 'node'; wrap.dataset.id = node.id;
 
-function renderNode(n, isRoot){
-  const wrap = document.createElement('div'); wrap.className='node'; wrap.dataset.id=n.id;
-  const row = document.createElement('div'); row.className='row';
-  if(!isRoot){ row.draggable = true; }
+  const row = document.createElement('div');
+  row.className = 'row'; row.dataset.id = node.id;
 
-  /* bullet */
-  const hasBody = n.type==='folder' ? (n.children.length>0) : true;
-  const b = document.createElement('span');
-  b.className = 'bullet' + (hasBody ? (n.collapsed?' closed':'') : ' leaf');
-  b.innerHTML = '<span class="dot"></span>';
-  b.title = n.collapsed ? '展開' : '收合';
-  b.onclick = () => { n.collapsed = !n.collapsed; markDirty(true); render(); };
-  row.appendChild(b);
+  // toggle bullet
+  const tog = document.createElement('span');
+  tog.className = 'tog' + (node.collapsed ? ' halo' : '') + ((node.type === 'folder' && !(node.children||[]).length) ? ' leafdot' : '');
+  tog.title = node.collapsed ? '展開' : '收合';
+  tog.onclick = () => { node.collapsed = !node.collapsed; render(); scheduleSync(); };
+  row.appendChild(tog);
 
-  /* type icon */
-  const ic = document.createElement('span'); ic.innerHTML = IC[n.type]; row.appendChild(ic.firstChild);
-
-  /* title — click to edit */
+  // title
   const t = document.createElement('span');
-  t.className='title'; t.textContent = n.title; t.contentEditable = 'true'; t.spellcheck=false;
-  t.oninput = () => { n.title = t.textContent; markDirty(true); };
-  t.onkeydown = e => { if(e.key==='Enter'){ e.preventDefault(); t.blur(); } };
+  t.className = 'title'; t.contentEditable = 'true'; t.spellcheck = false;
+  t.dataset.ph = node.type === 'folder' ? '未命名資料夾' : '未命名文章';
+  t.textContent = node.title || '';
+  t.oninput = () => { node.title = t.textContent; scheduleSync(); };
+  t.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); t.blur(); } };
   row.appendChild(t);
 
-  /* hover actions */
-  const acts = document.createElement('span'); acts.className='acts';
-  if(n.type==='folder'){
-    acts.appendChild(mkBtn(IC.addArt,'新增文章卡', ()=>{ 
-      n.children.push({id:uid(),type:'article',title:'新文章',content:'',collapsed:false,fmtOn:false});
-      n.collapsed=false; markDirty(true); render(); }));
-    acts.appendChild(mkBtn(IC.addFold,'新增子資料夾', ()=>{
-      n.children.push({id:uid(),type:'folder',title:'新資料夾',collapsed:false,children:[]});
-      n.collapsed=false; markDirty(true); render(); }));
+  // action icons (hidden until hover)
+  const acts = document.createElement('span');
+  acts.className = 'acts';
+  const mk = (ic, tip, fn) => { const b = document.createElement('button'); b.className = 'ib'; b.title = tip; b.innerHTML = icon(ic); b.onclick = fn; return b; };
+
+  if (node.type === 'folder') {
+    acts.appendChild(mk('i-card', '新增文章卡', () => {
+      node.children.push({ id: uid(), type: 'card', title: '', content: '', collapsed: false, showToolbar: false, children: [] });
+      node.collapsed = false; render(); scheduleSync();
+    }));
+    acts.appendChild(mk('i-folder', '新增子資料夾', () => {
+      node.children.push({ id: uid(), type: 'folder', title: '', collapsed: false, children: [] });
+      node.collapsed = false; render(); scheduleSync();
+    }));
+  } else {
+    acts.appendChild(mk('i-fmt', '格式工具列', () => { node.showToolbar = !node.showToolbar; node.collapsed = false; render(); }));
   }
-  if(!isRoot){
-    const d = mkBtn(IC.del,'刪除', ()=>{
-      if(!confirm('刪除「'+(n.title||'未命名')+'」及其所有內容?')) return;
-      const r = find(root, n.id); r.parent.children = r.parent.children.filter(c=>c.id!==n.id);
-      markDirty(true); render(); });
-    d.classList.add('danger'); acts.appendChild(d);
+  if (node.id !== 'root') {
+    acts.appendChild(mk('i-trash', '刪除', () => {
+      if (!confirm('刪除「' + (node.title || '未命名') + '」及其所有內容?')) return;
+      const loc = locate(node.id); loc.parent.children = loc.parent.children.filter(c => c.id !== node.id);
+      render(); scheduleSync();
+    }));
+    const g = mk('i-grip', '拖曳移動', () => {}); g.classList.add('grip'); g.draggable = true;
+    g.ondragstart = e => { e.dataTransfer.setData('text/plain', node.id); e.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); };
+    g.ondragend = () => row.classList.remove('dragging');
+    acts.appendChild(g);
   }
   row.appendChild(acts);
+
+  // drop target behaviour
+  row.ondragover = e => {
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+    const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height;
+    row.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-into');
+    if (node.id === 'root') { row.classList.add('drag-over-into'); return; }
+    if (y < 0.3) row.classList.add('drag-over-top');
+    else if (y > 0.7) row.classList.add('drag-over-bottom');
+    else row.classList.add(node.type === 'folder' ? 'drag-over-into' : 'drag-over-bottom');
+  };
+  row.ondragleave = () => row.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-into');
+  row.ondrop = e => {
+    e.preventDefault();
+    const mode = row.classList.contains('drag-over-top') ? 'before' : row.classList.contains('drag-over-into') ? 'into' : 'after';
+    row.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-into');
+    const srcId = e.dataTransfer.getData('text/plain');
+    if (!srcId || srcId === node.id) return;
+    const src = locate(srcId); if (!src) return;
+    if (isDescendant(src.node, node.id)) return; // 不可放進自己的子孫
+    src.parent.children = src.parent.children.filter(c => c.id !== srcId);
+    if (mode === 'into') { node.children.push(src.node); node.collapsed = false; }
+    else {
+      const loc = locate(node.id); const arr = loc.parent.children;
+      const i = arr.findIndex(c => c.id === node.id);
+      arr.splice(mode === 'before' ? i : i + 1, 0, src.node);
+    }
+    render(); scheduleSync();
+  };
+
   wrap.appendChild(row);
 
-  /* drag & drop */
-  if(!isRoot){
-    row.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', n.id); e.stopPropagation(); });
+  // body
+  if (node.type === 'card' && !node.collapsed) {
+    const bodyWrap = document.createElement('div'); bodyWrap.className = 'cardbody';
+    const card = document.createElement('div'); card.className = 'card';
+    const tb = document.createElement('div'); tb.className = 'toolbar' + (node.showToolbar ? '' : ' hide');
+    const cmd = (label, tip, c, arg) => { const b = document.createElement('button'); b.className = 'tb'; b.title = tip; b.innerHTML = label;
+      b.onmousedown = e => e.preventDefault(); b.onclick = () => { document.execCommand(c, false, arg || null); rt.focus(); node.content = rt.innerHTML; scheduleSync(); }; return b; };
+    tb.appendChild(cmd('<b>B</b>', '粗體', 'bold'));
+    tb.appendChild(cmd('<i>I</i>', '斜體', 'italic'));
+    tb.appendChild(cmd('<u>U</u>', '底線', 'underline'));
+    tb.appendChild(cmd('•≡', '項目符號', 'insertUnorderedList'));
+    tb.appendChild(cmd('⇤', '減少縮排', 'outdent'));
+    tb.appendChild(cmd('⇥', '增加縮排', 'indent'));
+    tb.appendChild(cmd('✕fmt', '清除格式', 'removeFormat'));
+    card.appendChild(tb);
+    const rt = document.createElement('div');
+    rt.className = 'rt'; rt.contentEditable = 'true'; rt.spellcheck = false; rt.innerHTML = node.content || '';
+    rt.oninput = () => { node.content = rt.innerHTML; scheduleSync(); };
+    card.appendChild(rt);
+    bodyWrap.appendChild(card);
+    wrap.appendChild(bodyWrap);
   }
-  row.addEventListener('dragover', e=>{
-    e.preventDefault(); e.stopPropagation();
-    row.classList.remove('drag-over-into','drag-over-before','drag-over-after');
-    const rect=row.getBoundingClientRect(), y=(e.clientY-rect.top)/rect.height;
-    if(n.type==='folder' && y>.3 && y<.7) row.classList.add('drag-over-into');
-    else if(y<=.5) row.classList.add('drag-over-before');
-    else row.classList.add('drag-over-after');
-  });
-  row.addEventListener('dragleave', ()=> row.classList.remove('drag-over-into','drag-over-before','drag-over-after'));
-  row.addEventListener('drop', e=>{
-    e.preventDefault(); e.stopPropagation();
-    const mode = row.classList.contains('drag-over-into')?'into':row.classList.contains('drag-over-before')?'before':'after';
-    row.classList.remove('drag-over-into','drag-over-before','drag-over-after');
-    const dragId = e.dataTransfer.getData('text/plain');
-    if(!dragId || dragId===n.id) return;
-    const src = find(root, dragId); if(!src) return;
-    if(src.node.type==='folder' && (isDescendant(src.node, n.id))) return; /* 不可移入自身子孫 */
-    if(isRoot && mode!=='into') return;
-    src.parent.children = src.parent.children.filter(c=>c.id!==dragId);
-    if(mode==='into'){ n.children.push(src.node); n.collapsed=false; }
-    else{
-      const tgt = find(root, n.id); const arr = tgt.parent.children;
-      let idx = arr.findIndex(c=>c.id===n.id); if(mode==='after') idx++;
-      arr.splice(idx,0,src.node);
-    }
-    markDirty(true); render();
-  });
-
-  /* body */
-  if(!n.collapsed){
-    if(n.type==='folder'){
-      const kids=document.createElement('div'); kids.className='children';
-      n.children.forEach(c=>kids.appendChild(renderNode(c,false)));
-      wrap.appendChild(kids);
-    }else{
-      wrap.appendChild(renderCard(n));
-    }
+  if (node.type === 'folder' && !node.collapsed && (node.children || []).length) {
+    const kids = document.createElement('div'); kids.className = 'kids';
+    node.children.forEach(c => kids.appendChild(renderNode(c, depth + 1)));
+    wrap.appendChild(kids);
   }
   return wrap;
 }
 
-function mkBtn(svg, title, fn){
-  const b=document.createElement('button'); b.className='ibtn'; b.title=title; b.innerHTML=svg;
-  b.onclick=e=>{ e.stopPropagation(); fn(); }; return b;
+/* ============ expand / collapse levels ============ */
+function expandLevels(n) { walk(tree, (nd, d) => { nd.collapsed = d >= n; }); tree.collapsed = false; render(); scheduleSync(); }
+document.getElementById('ex1').onclick = () => expandLevels(1);
+document.getElementById('ex2').onclick = () => expandLevels(2);
+document.getElementById('ex3').onclick = () => expandLevels(3);
+document.getElementById('exAll').onclick = () => { walk(tree, nd => nd.collapsed = false); render(); scheduleSync(); };
+document.getElementById('colAll').onclick = () => { walk(tree, (nd, d) => nd.collapsed = d > 0); render(); scheduleSync(); };
+
+/* ============ IndexedDB ============ */
+let idb;
+const idbReady = new Promise(res => {
+  const rq = indexedDB.open('article-tree', 1);
+  rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
+  rq.onsuccess = () => { idb = rq.result; res(); };
+  rq.onerror = () => res();
+});
+function idbPut(val) { if (!idb) return; const tx = idb.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, 'tree'); }
+function idbGet() { return new Promise(res => { if (!idb) return res(null); const rq = idb.transaction('kv').objectStore('kv').get('tree'); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }); }
+
+/* ============ Supabase sync ============ */
+const TABLE = 'article_tree', ROW_ID = 'main';
+let sb = null, syncTimer = null, retryTimer = null;
+const dot = document.getElementById('dot'), dotLabel = document.getElementById('dotLabel');
+function setStatus(s) {
+  dot.className = s;
+  dotLabel.textContent = { ok: '已同步', sync: '同步中', err: '同步失敗', local: '本機' }[s] || '';
+}
+function initSb() {
+  const url = localStorage.getItem('sb_url'), key = localStorage.getItem('sb_key');
+  if (url && key && window.supabase) { try { sb = window.supabase.createClient(url, key); return true; } catch (e) { sb = null; } }
+  sb = null; return false;
+}
+function scheduleSync() {
+  idbPut(JSON.parse(JSON.stringify(tree)));           // 立即本機備援
+  if (!sb) { setStatus('local'); return; }
+  setStatus('sync');
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushCloud, 1500);             // 1.5s 防抖
+}
+async function pushCloud() {
+  if (!sb) return;
+  clearTimeout(retryTimer);
+  try {
+    const { error } = await sb.from(TABLE).upsert({ id: ROW_ID, data: tree, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    setStatus('ok');
+  } catch (e) {
+    setStatus('err');
+    retryTimer = setTimeout(pushCloud, 5000);          // 每 5 秒自動重試
+  }
+}
+async function loadCloud() {
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb.from(TABLE).select('data').eq('id', ROW_ID).maybeSingle();
+    if (error) throw error;
+    return data ? data.data : null;
+  } catch (e) { return null; }
 }
 
-function renderCard(n){
-  const card=document.createElement('div'); card.className='card';
-  const tools=document.createElement('div'); tools.className='card-tools'+(n.fmtOn?'':' hidden');
-  const cmds=[['bold','<b>B</b>','粗體'],['italic','<i>I</i>','斜體'],['underline','<u>U</u>','底線'],
-              ['insertUnorderedList','••','項目符號'],['removeFormat','⌫','清除格式']];
-  cmds.forEach(([cmd,label,tip])=>{
-    const b=document.createElement('button'); b.className='ibtn'; b.innerHTML=label; b.title=tip;
-    b.onmousedown=e=>e.preventDefault(); /* 保留選取範圍 */
-    b.onclick=()=>{ document.execCommand(cmd,false,null); };
-    tools.appendChild(b);
+/* settings panel */
+const cfg = document.getElementById('cfg');
+document.getElementById('btnCfg').onclick = () => {
+  document.getElementById('cfgUrl').value = localStorage.getItem('sb_url') || '';
+  document.getElementById('cfgKey').value = localStorage.getItem('sb_key') || '';
+  cfg.classList.toggle('show');
+};
+document.getElementById('cfgSave').onclick = () => {
+  localStorage.setItem('sb_url', document.getElementById('cfgUrl').value.trim());
+  localStorage.setItem('sb_key', document.getElementById('cfgKey').value.trim());
+  cfg.classList.remove('show');
+  if (initSb()) { setStatus('sync'); pushCloud(); } else setStatus('local');
+};
+
+/* ============ HTML → Markdown ============ */
+function inlineMd(node) {
+  let out = '';
+  node.childNodes.forEach(n => {
+    if (n.nodeType === 3) { out += n.textContent; return; }
+    const t = (n.tagName || '').toLowerCase();
+    if (t === 'b' || t === 'strong') out += '**' + inlineMd(n) + '**';
+    else if (t === 'i' || t === 'em') out += '*' + inlineMd(n) + '*';
+    else if (t === 'br') out += '\n';
+    else out += inlineMd(n);
   });
-  card.appendChild(tools);
-
-  const rich=document.createElement('div'); rich.className='rich'; rich.contentEditable='true'; rich.spellcheck=false;
-  rich.innerHTML = n.content||'';
-  rich.oninput = ()=>{ n.content = rich.innerHTML; markDirty(true); };
-  card.appendChild(rich);
-
-  /* 格式列切換鈕:置於卡片右上,滑入才顯示 */
-  const fmtBtn=mkBtn(IC.fmt, n.fmtOn?'隱藏格式工具':'顯示格式工具', ()=>{ n.fmtOn=!n.fmtOn; render(); });
-  fmtBtn.style.cssText='position:absolute;top:4px;right:4px;opacity:0';
-  card.style.position='relative';
-  card.onmouseenter=()=>fmtBtn.style.opacity=1;
-  card.onmouseleave=()=>fmtBtn.style.opacity=0;
-  card.appendChild(fmtBtn);
-  return card;
-}
-
-/* ================= expand / collapse levels ================= */
-function setDepth(n, depth, limit, expandArticles){
-  if(n.type==='folder'){
-    n.collapsed = depth >= limit;
-    n.children.forEach(c=>setDepth(c, depth+1, limit, expandArticles));
-  }else{
-    n.collapsed = !expandArticles;
-  }
-}
-document.getElementById('ex1').onclick=()=>{ setDepth(root,0,1,false); render(); };
-document.getElementById('ex2').onclick=()=>{ setDepth(root,0,2,false); render(); };
-document.getElementById('ex3').onclick=()=>{ setDepth(root,0,3,false); render(); };
-document.getElementById('exAll').onclick=()=>{ setDepth(root,0,Infinity,true); render(); };
-document.getElementById('coAll').onclick=()=>{ setDepth(root,0,0,false); root.collapsed=false;
-  root.children.forEach(c=>{ if(c.type==='article') c.collapsed=true; }); render(); };
-
-/* ================= file ops ================= */
-async function saveFile(content, suggested, mime, desc, ext){
-  if(window.showSaveFilePicker){
-    try{
-      const h = await showSaveFilePicker({suggestedName:suggested,
-        types:[{description:desc, accept:{[mime]:[ext]}}]});
-      const w = await h.createWritable(); await w.write(content); await w.close();
-      return true;
-    }catch(e){ if(e.name==='AbortError') return false; }
-  }
-  /* Safari 等瀏覽器:下載後可自行移至 iCloud Drive */
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
-  a.download=suggested; a.click(); URL.revokeObjectURL(a.href);
-  return true;
-}
-document.getElementById('btnExport').onclick=async()=>{
-  const ok = await saveFile(JSON.stringify({settings, tree:root}, null, 2),
-    'article-tree.json','application/json','JSON 檔','.json');
-  if(ok) markDirty(false);
-};
-document.getElementById('btnImport').onclick=()=>document.getElementById('fileIn').click();
-document.getElementById('fileIn').onchange=e=>{
-  const f=e.target.files[0]; if(!f) return;
-  const r=new FileReader();
-  r.onload=()=>{ try{
-      const d=JSON.parse(r.result);
-      root = d.tree || d;
-      if(d.settings){ settings=d.settings; applySettings(); }
-      markDirty(false); render();
-    }catch(err){ alert('無法解析此 JSON 檔:'+err.message); } };
-  r.readAsText(f); e.target.value='';
-};
-function toText(n, depth){
-  const pad='  '.repeat(depth);
-  let out = pad + (n.type==='folder'?'▸ ':'· ') + (n.title||'未命名') + '\n';
-  if(n.type==='article' && n.content){
-    const tmp=document.createElement('div'); tmp.innerHTML=n.content;
-    tmp.querySelectorAll('li').forEach(li=>li.textContent='• '+li.textContent+'\n');
-    tmp.querySelectorAll('div,p,br').forEach(el=>{ if(el.tagName==='BR') el.replaceWith('\n'); else el.append('\n'); });
-    out += tmp.textContent.split('\n').filter(s=>s.trim()).map(s=>pad+'  '+s.trim()).join('\n')+'\n';
-  }
-  (n.children||[]).forEach(c=> out += toText(c, depth+1));
   return out;
 }
-document.getElementById('btnText').onclick=()=> saveFile(toText(root,0),'article-tree.txt','text/plain','文字檔','.txt');
-document.getElementById('btnReset').onclick=()=>{
-  if(!confirm('清除全部內容並重新開始?此動作無法復原(建議先匯出 JSON)。')) return;
-  root={id:'root',type:'folder',title:'根目錄',collapsed:false,children:[]};
-  markDirty(false); render();
+function listMd(ul, depth) {
+  let out = '';
+  [...ul.children].forEach(li => {
+    let text = '', sub = '';
+    li.childNodes.forEach(c => {
+      if (c.nodeType === 1 && (c.tagName === 'UL' || c.tagName === 'OL')) sub += listMd(c, depth + 1);
+      else text += c.nodeType === 3 ? c.textContent : inlineMd(c);
+    });
+    if (text.trim() || sub) out += '  '.repeat(depth) + '- ' + text.trim() + '\n' + sub;
+  });
+  return out;
+}
+function blockMd(el, depth) {
+  let out = '';
+  el.childNodes.forEach(n => {
+    if (n.nodeType === 3) { if (n.textContent.trim()) out += n.textContent + '\n'; return; }
+    const t = n.tagName.toLowerCase();
+    if (t === 'ul' || t === 'ol') out += listMd(n, depth);
+    else if (t === 'div' || t === 'p') { const s = blockMd(n, depth); out += s || '\n'; }
+    else if (t === 'br') out += '\n';
+    else out += inlineMd(n) + '\n';
+  });
+  return out;
+}
+function htmlToMd(html) {
+  const tmp = document.createElement('div'); tmp.innerHTML = html || '';
+  return blockMd(tmp, 0).replace(/\n{3,}/g, '\n\n').trim();
+}
+function htmlToText(html) { return htmlToMd(html).replace(/\*\*/g, '').replace(/(^|\n)\*(.*?)\*/g, '$1$2'); }
+
+/* ============ exports ============ */
+async function saveFile(blob, name, types) {
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await showSaveFilePicker({ suggestedName: name, types });
+      const w = await h.createWritable(); await w.write(blob); await w.close(); return;
+    } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+
+document.getElementById('btnExpJson').onclick = () =>
+  saveFile(new Blob([JSON.stringify(tree, null, 2)], { type: 'application/json' }), 'article-tree-' + stamp() + '.json',
+    [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]);
+
+document.getElementById('btnImpJson').onclick = () => document.getElementById('fileImp').click();
+document.getElementById('fileImp').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const obj = JSON.parse(await f.text());
+    if (!obj || obj.type !== 'folder' || !Array.isArray(obj.children)) throw 0;
+    tree = obj; render(); scheduleSync();
+  } catch (_) { alert('檔案格式無效:僅接受由本應用匯出的 JSON。'); }
+  e.target.value = '';
 };
 
-/* ================= style controls ================= */
-function applySettings(){
-  document.documentElement.style.setProperty('--ff', settings.ff);
-  document.documentElement.style.setProperty('--fs', settings.fs+'px');
-  document.documentElement.style.setProperty('--gold', settings.gold);
-  const c=settings.gold, r=parseInt(c.slice(1,3),16), g=parseInt(c.slice(3,5),16), bl=parseInt(c.slice(5,7),16);
-  document.documentElement.style.setProperty('--gold-dim', `rgba(${r},${g},${bl},.35)`);
-  document.documentElement.style.setProperty('--gold-halo', `rgba(${r},${g},${bl},.22)`);
-  document.getElementById('selFont').value=settings.ff;
-  document.getElementById('numSize').value=settings.fs;
-  document.getElementById('colGold').value=settings.gold;
-}
-document.getElementById('selFont').onchange=e=>{ settings.ff=e.target.value; applySettings(); markDirty(true); };
-document.getElementById('numSize').onchange=e=>{ settings.fs=+e.target.value||12; applySettings(); markDirty(true); };
-document.getElementById('colGold').oninput=e=>{ settings.gold=e.target.value; applySettings(); markDirty(true); };
+document.getElementById('btnExpTxt').onclick = () => {
+  let out = '';
+  walk(tree, (n, d) => {
+    const pad = '  '.repeat(d);
+    out += pad + (n.type === 'folder' ? '📁 ' : '') + (n.title || '未命名') + '\n';
+    if (n.type === 'card' && n.content) out += htmlToText(n.content).split('\n').map(l => pad + '  ' + l).join('\n') + '\n';
+  });
+  saveFile(new Blob([out], { type: 'text/plain;charset=utf-8' }), 'article-tree-' + stamp() + '.txt',
+    [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }]);
+};
 
-/* 關閉前提醒未匯出 */
-window.addEventListener('beforeunload', e=>{ if(dirty){ e.preventDefault(); e.returnValue=''; } });
+document.getElementById('btnExpMd').onclick = () => {
+  let out = '';
+  walk(tree, (n, d) => {
+    if (n.type === 'folder') out += '#'.repeat(Math.min(d + 1, 6)) + ' ' + (n.title || '未命名') + '\n\n';
+    else { out += '**' + (n.title || '未命名') + '**\n\n'; const b = htmlToMd(n.content); if (b) out += b + '\n\n'; }
+  });
+  saveFile(new Blob([out], { type: 'text/markdown;charset=utf-8' }), 'article-tree-' + stamp() + '.md',
+    [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }]);
+};
 
-/* ================= init:示範內容 ================= */
-root.children=[
-  {id:uid(),type:'folder',title:'策略思考',collapsed:false,children:[
-    {id:uid(),type:'article',title:'第一性原理',collapsed:false,fmtOn:false,
-     content:'<ul><li>拆解至不可再分的基本事實</li><li>由基本事實重新推導,而非類比既有方案</li><li>適用於高不確定性決策</li></ul>'},
-    {id:uid(),type:'article',title:'槓桿點分析',collapsed:true,fmtOn:false,
-     content:'<ul><li>找出系統中投入最少,影響最大的節點</li><li>優先改變結構,而非參數</li></ul>'}
-  ]},
-  {id:uid(),type:'folder',title:'閱讀筆記',collapsed:true,children:[]}
-];
-applySettings(); render();
+const slug = s => (s || '未命名').replace(/[\\/:*?"<>|#%{}^~\[\]`]/g, '').trim().slice(0, 60) || '未命名';
+document.getElementById('btnExpOkf').onclick = async () => {
+  if (!window.JSZip) { alert('JSZip 未載入,請檢查網路。'); return; }
+  const zip = new JSZip();
+  const used = new Set();
+  const uniq = (base, ext) => { let n = base, i = 1; while (used.has(n + ext)) n = base + '-' + (++i); used.add(n + ext); return n + ext; };
+  (function emit(node, path) {
+    (node.children || []).forEach(c => {
+      if (c.type === 'folder') emit(c, path + slug(c.title) + '/');
+      else {
+        const body = htmlToMd(c.content);
+        const desc = htmlToText(c.content).replace(/\n+/g, ' ').slice(0, 80);
+        const fm = ['---', 'type: article', 'title: "' + (c.title || '未命名').replace(/"/g, '\\"') + '"',
+          'description: "' + desc.replace(/"/g, '\\"') + '"', 'tags: []',
+          'timestamp: ' + new Date().toISOString(), '---', '', body, ''].join('\n');
+        zip.file(path + uniq(slug(c.title), '.md'), fm);
+      }
+    });
+  })(tree, slug(tree.title) + '/');
+  const blob = await zip.generateAsync({ type: 'blob' });
+  saveFile(blob, 'okf-bundle-' + stamp() + '.zip', [{ description: 'Zip', accept: { 'application/zip': ['.zip'] } }]);
+};
+
+document.getElementById('btnReset').onclick = () => {
+  if (!confirm('確定清除所有內容並重新開始?此動作會覆蓋雲端資料。')) return;
+  tree = freshTree(); render(); scheduleSync();
+};
+
+/* ============ styling controls ============ */
+const rootStyle = document.documentElement.style;
+document.getElementById('selFont').onchange = e => rootStyle.setProperty('--font', e.target.value);
+document.getElementById('selSize').onchange = e => rootStyle.setProperty('--fs', e.target.value + 'px');
+document.getElementById('selIndent').onchange = e => rootStyle.setProperty('--indent', e.target.value + 'px');
+document.getElementById('inBorder').oninput = e => rootStyle.setProperty('--line', e.target.value);
+
+/* ============ controls toggle ============ */
+const footer = document.getElementById('controls'), ctlToggle = document.getElementById('ctlToggle');
+ctlToggle.onclick = () => {
+  footer.classList.toggle('hide');
+  ctlToggle.textContent = footer.classList.contains('hide') ? '⌃ 控制列' : '⌄ 控制列';
+};
+
+/* ============ init ============ */
+(async function init() {
+  await idbReady;
+  initSb();
+  let loaded = null, from = '';
+  if (sb) { loaded = await loadCloud(); if (loaded) from = 'cloud'; }
+  if (!loaded) { loaded = await idbGet(); if (loaded) from = 'idb'; }
+  if (loaded) tree = loaded;
+  render();
+  if (from === 'cloud') setStatus('ok');
+  else if (sb) { setStatus('sync'); pushCloud(); }
+  else setStatus('local');
+})();
 </script>
 </body>
 </html>
