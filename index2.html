@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartNotes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f; --surface: #14141a; --line: #c9a227; --text: #e0e0e0;
+  --accent: #f0c040; --radius: 6px; --font: "PingFang TC", sans-serif;
+  --base-size: 12px; --indent: 18px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: var(--base-size); line-height: 1.2; overflow-x: hidden; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+#header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+#header h1 { font-weight: bold; letter-spacing: 1px; }
+#status-dot { width: 8px; height: 8px; border-radius: 50%; background: gold; margin-left: 12px; }
+#tree-container { flex: 1; overflow-y: auto; padding: 16px 0; }
+.tree-node { margin-left: var(--indent); }
+.node-row { display: flex; align-items: center; padding: 4px 8px; cursor: pointer; border-radius: var(--radius); transition: background 0.2s; }
+.node-row:hover { background: #1a1a22; }
+.toggle { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); text-shadow: 0 0 6px var(--accent); margin-right: 6px; font-size: 10px; user-select: none; }
+.node-name { font-weight: bold; outline: none; border: none; background: transparent; color: inherit; font-family: inherit; font-size: inherit; width: 100%; }
+.node-name:focus { border-bottom: 1px solid var(--line); }
+.card { margin-left: calc(var(--indent) + 4px); border: 1px solid #333; border-radius: var(--radius); padding: 8px; background: var(--surface); }
+.card-header { display: flex; align-items: center; margin-bottom: 6px; }
+.card-body { outline: none; min-height: 40px; padding: 4px; line-height: 1.3; }
+.card-body ul { padding-left: 16px; list-style: none; }
+.card-body li { margin-bottom: 2px; }
+.toolbar { display: inline-flex; gap: 4px; margin-left: auto; }
+.btn { background: transparent; border: 1px solid #444; color: var(--text); padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 10px; }
+.btn:hover { border-color: var(--line); }
+.color-palette { display: none; position: absolute; background: var(--surface); border: 1px solid var(--line); padding: 6px; border-radius: var(--radius); z-index: 100; }
+.color-palette.show { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.color-swatch { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; border: 1px solid #555; }
+#controls { border-top: 1px solid var(--line); padding: 10px 16px; background: var(--surface); display: none; flex-direction: column; gap: 8px; }
+#controls.open { display: flex; }
+.ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ctrl-btn { background: #1a1a22; border: 1px solid #444; color: var(--text); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+.ctrl-btn:hover { border-color: var(--line); }
+select { background: #1a1a22; color: var(--text); border: 1px solid #444; padding: 2px 4px; border-radius: 4px; font-size: 11px; }
+.drag-over { border: 1px dashed var(--line); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <h1>SmartNotes</h1>
+    <span id="status-dot" title="同步狀態"></span>
+  </div>
+  <div id="tree-container"></div>
+  <div id="controls">
+    <div class="ctrl-row">
+      <button class="ctrl-btn" onclick="exportJSON()">匯出 JSON</button>
+      <button class="ctrl-btn" onclick="importJSON()">匯入 JSON</button>
+      <button class="ctrl-btn" onclick="exportText()">匯出文字</button>
+      <button class="ctrl-btn" onclick="exportHTML()">匯出 HTML</button>
+      <button class="ctrl-btn" onclick="resetAll()">重置</button>
+    </div>
+    <div class="ctrl-row">
+      <select id="fontSelect" onchange="updateStyle('font', this.value)">字體</select>
+      <select id="sizeSelect" onchange="updateStyle('size', this.value)">字級</select>
+      <select id="indentSelect" onchange="updateStyle('indent', this.value)">縮排</select>
+      <select id="borderSelect" onchange="updateStyle('border', this.value)">邊框色</select>
+    </div>
+    <div class="ctrl-row">
+      <button class="ctrl-btn" onclick="expandLevels(1)">展開 1 層</button>
+      <button class="ctrl-btn" onclick="expandLevels(2)">展開 2 層</button>
+      <button class="ctrl-btn" onclick="expandLevels(3)">展開 3 層</button>
+      <button class="ctrl-btn" onclick="expandLevels(Infinity)">展開全部</button>
+      <button class="ctrl-btn" onclick="collapseAll()">收合全部</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="jsonInput" accept=".json" style="display:none" onchange="handleImport(event)">
+<script>
+// 狀態樹結構
+const defaultTree = [{ id: 'root', type: 'folder', name: 'TITLE', expanded: true, children: [] }];
+let state = JSON.parse(JSON.stringify(defaultTree));
+let dragSrc = null;
+let syncTimer = null;
+
+// Supabase 設定
+const SUPABASE_URL = "https://bxeraximugvvpkpaejdn.supabase.co/";
+const SUPABASE_KEY = "sb_publishable_i8jvS_ivsLBzYwb2HAKk1Q_d4DtCHjX";
+const TABLE = "smartnotes_state";
+const ROW_ID = "main";
+
+// IndexedDB 設定
+const DB_NAME = "SmartNotesDB";
+const DB_STORE = "notes";
+
+// 初始化
+document.addEventListener("DOMContentLoaded", () => {
+  initDB();
+  loadState();
+  renderTree();
+  setupControls();
+  requestStyleAccess();
+});
+
+// 狀態載入邏輯
+async function loadState() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=payload`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Prefer": "return=minimal" }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.length > 0) { state = data[0].payload; syncStatus("synced"); renderTree(); return; }
+    }
+  } catch (e) { console.warn("Supabase 離線，載入本地備份"); }
+  
+  const local = await getFromDB();
+  if (local) { state = local; syncStatus("synced"); renderTree(); return; }
+  
+  state = JSON.parse(JSON.stringify(defaultTree));
+  renderTree();
+}
+
+// IndexedDB 操作
+function initDB() {
+  const req = indexedDB.open(DB_NAME, 1);
+  req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
+}
+function saveToDB() { return new Promise(resolve => {
+  const req = indexedDB.open(DB_NAME, 1);
+  req.onsuccess = e => {
+    const db = e.target.result;
+    const tx = db.transaction(DB_STORE, "readwrite");
+    tx.objectStore(DB_STORE).put(state, "main");
+    tx.oncomplete = () => resolve();
+  };
+});}
+
+// Supabase 同步
+function syncToCloud() {
+  syncStatus("syncing");
+  fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+    method: "POST",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+    body: JSON.stringify({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() })
+  }).then(() => syncStatus("synced")).catch(() => syncStatus("failed"));
+}
+function debouncedSync() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    saveToDB();
+    syncToCloud();
+  }, 1500);
+}
+
+function syncStatus(status) {
+  const dot = document.getElementById("status-dot");
+  dot.style.background = status === "syncing" ? "gold" : status === "synced" ? "green" : "red";
+  if (status === "failed") setTimeout(syncToCloud, 5000);
+}
+
+// 渲染引擎
+function renderTree() {
+  const container = document.getElementById("tree-container");
+  container.innerHTML = "";
+  state.forEach(node => container.appendChild(renderNode(node)));
+}
+
+function renderNode(node) {
+  const div = document.createElement("div");
+  div.className = "tree-node";
+  div.dataset.id = node.id;
+  div.draggable = true;
+  
+  const row = document.createElement("div");
+  row.className = "node-row";
+  row.innerHTML = `<span class="toggle" data-id="${node.id}">${node.children?.length ? (node.expanded ? "▼" : "▶") : "•"}</span>
+                   <input class="node-name" value="${node.name}" spellcheck="false">`;
+  
+  if (node.type === "card") {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<div class="card-header"><span class="node-name" value="${node.name}">${node.name}</span>
+      <div class="toolbar">
+        <button class="btn" onclick="toggleColor(this)">🎨</button>
+        <button class="btn" onclick="deleteNode('${node.id}')">🗑</button>
+      </div>
+      <div class="color-palette"></div>
+    </div>
+    <div class="card-body" contenteditable="true">${node.content || ""}</div>`;
+    row.appendChild(card);
+    setupCardEvents(card, node);
+  }
+  
+  div.appendChild(row);
+  if (node.children?.length) {
+    node.children.forEach(child => div.appendChild(renderNode(child)));
+  }
+  div.style.display = node.expanded ? "block" : "none";
+  
+  // 事件綁定
+  row.querySelector(".node-name").addEventListener("input", e => { node.name = e.target.value; debouncedSync(); });
+  row.querySelector(".toggle").addEventListener("click", () => { node.expanded = !node.expanded; renderTree(); });
+  row.addEventListener("dblclick", () => addSibling(node.id, node.type === "folder" ? "folder" : "card"));
+  
+  // 拖曳
+  div.addEventListener("dragstart", e => { dragSrc = node.id; e.dataTransfer.effectAllowed = "move"; });
+  div.addEventListener("dragover", e => { e.preventDefault(); div.classList.add("drag-over"); });
+  div.addEventListener("dragleave", () => div.classList.remove("drag-over"));
+  div.addEventListener("drop", e => { e.preventDefault(); div.classList.remove("drag-over"); moveNode(dragSrc, node.id); });
+  
+  return div;
+}
+
+function setupCardEvents(cardEl, node) {
+  cardEl.querySelector(".card-body").addEventListener("input", e => { node.content = e.target.innerHTML; debouncedSync(); });
+  cardEl.querySelector(".node-name").addEventListener("input", e => { node.name = e.target.value; debouncedSync(); });
+  cardEl.querySelector(".btn:nth-child(1)").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const palette = cardEl.querySelector(".color-palette");
+    palette.classList.toggle("show");
+    if (palette.classList.contains("show")) {
+      const colors = ["#ff6b35", "#007bff", "#00d4aa", "#ffd700", "#ff4757", "#2ed573", "#1e90ff", "#ffa502"];
+      palette.innerHTML = colors.map(c => `<div class="color-swatch" style="background:${c}" onclick="applyColor('${c}')"></div>`).join("");
+    }
+  });
+  cardEl.querySelector(".btn:nth-child(2)").addEventListener("click", () => deleteNode(node.id));
+  window.applyColor = (c) => { cardEl.querySelector(".card-body").style.color = c; debouncedSync(); };
+}
+
+// 樹操作
+function addSibling(id, type) {
+  const target = findNode(id);
+  if (!target) return;
+  const parent = findParent(state, id);
+  const newItem = { id: crypto.randomUUID(), type, name: type === "folder" ? "FOLDER" : "ARTICLE", expanded: true, children: [], content: "" };
+  if (type === "folder") {
+    parent.children.push(newItem);
+  } else {
+    parent.children.push(newItem);
+  }
+  debouncedSync();
+  renderTree();
+}
+
+function deleteNode(id) {
+  const parent = findParent(state, id);
+  if (parent) {
+    parent.children = parent.children.filter(c => c.id !== id);
+    debouncedSync();
+    renderTree();
+  }
+}
+
+function moveNode(srcId, targetId) {
+  if (srcId === targetId) return;
+  const src = findNode(srcId);
+  const target = findNode(targetId);
+  if (!src || !target || isDescendant(target, src)) return;
+  const srcParent = findParent(state, srcId);
+  srcParent.children = srcParent.children.filter(c => c.id !== srcId);
+  target.children.push(src);
+  target.expanded = true;
+  debouncedSync();
+  renderTree();
+}
+
+function findNode(id, list = state) { return list.find(n => n.id === id) || list.flatMap(n => findNode(id, n.children)).find(Boolean); }
+function findParent(list, id, parent = null) {
+  for (const n of list) {
+    if (n.id === id) return parent;
+    const res = findParent(n.children, id, n);
+    if (res) return res;
+  }
+  return null;
+}
+function isDescendant(node, target) {
+  if (!node.children) return false;
+  return node.children.some(c => c.id === target.id || isDescendant(c, target));
+}
+
+// 匯出功能
+function getTimestamp() { return new Date().toISOString().slice(0, 10).replace(/-/g, ""); }
+function getBaseName() { return state[0]?.name || "SmartNotes"; }
+function triggerDownload(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `${getBaseName()} ${getTimestamp()}.${type.split("/")[1]}`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function exportJSON() { triggerDownload(JSON.stringify(state, null, 2), "json", "application/json"); }
+function exportText() {
+  let txt = "";
+  const walk = (nodes, depth) => nodes.forEach(n => {
+    txt += `${"  ".repeat(depth)}${n.name}\n`;
+    if (n.content) txt += `${"  ".repeat(depth + 1)}${n.content.replace(/<[^>]*>/g, "")}\n`;
+    if (n.children) walk(n.children, depth + 1);
+  });
+  walk(state, 0);
+  triggerDownload(txt, "txt", "text/plain");
+}
+function exportHTML() {
+  let html = "<html><head><style>body{background:#0a0a0f;color:#e0e0e0;font-family:sans-serif;padding:20px}ul{list-style:none}li{margin:4px 0}</style></head><body>";
+  const walk = (nodes) => nodes.forEach(n => {
+    html += `<ul><li><b>${n.name}</b>`;
+    if (n.content) html += `<div>${n.content}</div>`;
+    if (n.children) walk(n.children);
+    html += `</li></ul>`;
+  });
+  walk(state); html += "</body></html>";
+  triggerDownload(html, "html", "text/html");
+}
+function exportOKF() {
+  const zip = new JSZip();
+  const walk = (nodes, path = "") => nodes.forEach(n => {
+    if (n.type === "card") {
+      const md = `---\ntype: article\ntitle: ${n.name}\ndescription: \ntags: []\ntimestamp: ${new Date().toISOString()}\n---\n\n${n.content.replace(/<[^>]*>/g, "")}\n`;
+      zip.file(`${path}${n.name}.md`, md);
+    }
+    if (n.children) walk(n.children, `${path}${n.name}/`);
+  });
+  walk(state);
+  zip.generateAsync({ type: "blob" }).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `${getBaseName()} ${getTimestamp()}.zip`; a.click(); URL.revokeObjectURL(url);
+  });
+}
+
+// 控制項
+function setupControls() {
+  document.getElementById("controls").classList.add("open");
+  const fonts = ["PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Arial"];
+  const sizes = ["10px", "12px", "14px", "16px"];
+  const indents = ["12px", "18px", "24px", "30px"];
+  const borders = ["#333", "#c9a227", "#00d4aa", "#ff6b35"];
+  ["fontSelect", "sizeSelect", "indentSelect", "borderSelect"].forEach((id, i) => {
+    const opts = [fonts, sizes, indents, borders][i];
+    opts.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; document.getElementById(id).appendChild(o); });
+  });
+}
+function updateStyle(prop, val) {
+  if (prop === "font") document.documentElement.style.setProperty("--font", val);
+  if (prop === "size") document.documentElement.style.setProperty("--base-size", val);
+  if (prop === "indent") document.documentElement.style.setProperty("--indent", val);
+  if (prop === "border") document.documentElement.style.setProperty("--line", val);
+}
+function expandLevels(n) {
+  const expand = (nodes) => nodes.forEach(nd => { if(nd.children) nd.expanded = true, expand(nd.children); });
+  expand(state); renderTree();
+}
+function collapseAll() {
+  const collapse = (nodes) => nodes.forEach(nd => { if(nd.children) nd.expanded = false, collapse(nd.children); });
+  collapse(state); renderTree();
+}
+function resetAll() { if(confirm("確定清除所有資料？")) { state = JSON.parse(JSON.stringify(defaultTree)); debouncedSync(); renderTree(); } }
+function handleImport(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => { try { state = JSON.parse(ev.target.result); debouncedSync(); renderTree(); } catch(err) { alert("JSON 格式錯誤"); } };
+  reader.readAsText(file);
+}
+function requestStyleAccess() {
+  if (navigator.storage && navigator.storage.getDirectory) {
+    // 可擴展為直接寫入 iCloud Drive 路徑，目前依賴標準下載機制
+  }
+}
+</script>
+</body>
+</html>
