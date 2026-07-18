@@ -1,370 +1,579 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SmartNotes</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
-:root {
-  --bg: #0a0a0f; --surface: #14141a; --line: #c9a227; --text: #e0e0e0;
-  --accent: #f0c040; --radius: 6px; --font: "PingFang TC", sans-serif;
-  --base-size: 12px; --indent: 18px;
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: var(--base-size); line-height: 1.2; overflow-x: hidden; }
-#app { display: flex; flex-direction: column; height: 100vh; }
-#header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
-#header h1 { font-weight: bold; letter-spacing: 1px; }
-#status-dot { width: 8px; height: 8px; border-radius: 50%; background: gold; margin-left: 12px; }
-#tree-container { flex: 1; overflow-y: auto; padding: 16px 0; }
-.tree-node { margin-left: var(--indent); }
-.node-row { display: flex; align-items: center; padding: 4px 8px; cursor: pointer; border-radius: var(--radius); transition: background 0.2s; }
-.node-row:hover { background: #1a1a22; }
-.toggle { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; color: var(--accent); text-shadow: 0 0 6px var(--accent); margin-right: 6px; font-size: 10px; user-select: none; }
-.node-name { font-weight: bold; outline: none; border: none; background: transparent; color: inherit; font-family: inherit; font-size: inherit; width: 100%; }
-.node-name:focus { border-bottom: 1px solid var(--line); }
-.card { margin-left: calc(var(--indent) + 4px); border: 1px solid #333; border-radius: var(--radius); padding: 8px; background: var(--surface); }
-.card-header { display: flex; align-items: center; margin-bottom: 6px; }
-.card-body { outline: none; min-height: 40px; padding: 4px; line-height: 1.3; }
-.card-body ul { padding-left: 16px; list-style: none; }
-.card-body li { margin-bottom: 2px; }
-.toolbar { display: inline-flex; gap: 4px; margin-left: auto; }
-.btn { background: transparent; border: 1px solid #444; color: var(--text); padding: 2px 6px; border-radius: 4px; cursor: pointer; font-size: 10px; }
-.btn:hover { border-color: var(--line); }
-.color-palette { display: none; position: absolute; background: var(--surface); border: 1px solid var(--line); padding: 6px; border-radius: var(--radius); z-index: 100; }
-.color-palette.show { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
-.color-swatch { width: 16px; height: 16px; border-radius: 50%; cursor: pointer; border: 1px solid #555; }
-#controls { border-top: 1px solid var(--line); padding: 10px 16px; background: var(--surface); display: none; flex-direction: column; gap: 8px; }
-#controls.open { display: flex; }
-.ctrl-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.ctrl-btn { background: #1a1a22; border: 1px solid #444; color: var(--text); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-.ctrl-btn:hover { border-color: var(--line); }
-select { background: #1a1a22; color: var(--text); border: 1px solid #444; padding: 2px 4px; border-radius: 4px; font-size: 11px; }
-.drag-over { border: 1px dashed var(--line); }
+    :root {
+        --bg-dark: #0d0d0d;
+        --fg-light: #e0e0e0;
+        --accent-gold: #d4af37;
+        --border-thin: 1px solid rgba(212,175,55,0.3);
+        --radius-sm: 4px;
+        --font-main: "PingFang TC", sans-serif;
+    }
+    body {
+        margin:0; padding:0;
+        background:var(--bg-dark);
+        color:var(--fg-light);
+        font-family:var(--font-main);
+        font-size:12px;
+        display:flex;
+        height:100vh;
+        overflow:hidden;
+    }
+    #sidebar {
+        width:260px;
+        border-right:var(--border-thin);
+        padding:8px;
+        overflow-y:auto;
+        box-sizing:border-box;
+    }
+    #main {
+        flex:1;
+        padding:12px;
+        overflow-y:auto;
+        box-sizing:border-box;
+    }
+    .node {
+        display:flex;
+        align-items:center;
+        cursor:pointer;
+        user-select:none;
+        margin:2px 0;
+    }
+    .toggle {
+        width:16px;height:16px;
+        margin-right:6px;
+        background:none;
+        border:none;
+        color:var(--accent-gold);
+        font-size:14px;
+        line-height:1;
+    }
+    .toggle::before { content:"▸"; }
+    .toggle.open::before { content:"▾"; }
+    .title {
+        font-weight:bold;
+        flex:1;
+        padding:2px 4px;
+        border-radius:var(--radius-sm);
+    }
+    .title.editing {
+        background:rgba(212,175,55,0.2);
+        outline:none;
+        border:none;
+    }
+    .article-card {
+        margin:8px 0;
+        padding:10px;
+        border:var(--border-thin);
+        border-radius:var(--radius-sm);
+        background:rgba(212,175,55,0.05);
+    }
+    .article-title {
+        font-weight:bold;
+        margin-bottom:4px;
+        cursor:text;
+        user-select:text;
+    }
+    .richtext {
+        min-height:36px;
+        outline:none;
+        border:none;
+        background:transparent;
+        color:var(--fg-light);
+        white-space:pre-wrap;
+        word-wrap:break-word;
+    }
+    .richtext:focus { outline:none; }
+    .edit-btn {
+        display:none;
+        margin-left:6px;
+        vertical-align:middle;
+        width:18px;height:18px;
+        background:none;
+        border:none;
+        color:var(--accent-gold);
+        font-size:16px;
+        cursor:pointer;
+    }
+    .node:hover .edit-btn,
+    .title.editing + .edit-btn { display:inline; }
+    .controls {
+        margin-top:12px;
+        padding-top:8px;
+        border-top:var(--border-thin);
+        display:flex;
+        flex-wrap:wrap;
+        gap:6px;
+        font-size:12px;
+    }
+    .controls button,
+    .controls select,
+    .controls input[type="color"] {
+        background:rgba(212,175,55,0.15);
+        border:none;
+        color:var(--fg-light);
+        padding:4px 6px;
+        border-radius:var(--radius-sm);
+        cursor:pointer;
+    }
+    .controls select,
+    .controls input[type="color"] { height:28px; }
+    .status-dot {
+        position:fixed;
+        top:8px; right:8px;
+        width:12px;height:12px;
+        border-radius:50%;
+        background:var(--accent-gold);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:10px;
+        color:#000;
+    }
+    .status-dot.synced { background:#4caf50; }
+    .status-dot.failed { background:#f44336; }
+    .toggle-section {
+        margin-top:8px;
+        padding-top:4px;
+        border-top:var(--border-thin);
+        font-size:12px;
+        color:var(--fg-light);
+        cursor:pointer;
+        user-select:none;
+    }
+    .toggle-section.hidden { display:none; }
+    .icon { width:18px;height:18px; display:inline-block; vertical-align:middle; }
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="header">
-    <h1>SmartNotes</h1>
-    <span id="status-dot" title="同步狀態"></span>
-  </div>
-  <div id="tree-container"></div>
-  <div id="controls">
-    <div class="ctrl-row">
-      <button class="ctrl-btn" onclick="exportJSON()">匯出 JSON</button>
-      <button class="ctrl-btn" onclick="importJSON()">匯入 JSON</button>
-      <button class="ctrl-btn" onclick="exportText()">匯出文字</button>
-      <button class="ctrl-btn" onclick="exportHTML()">匯出 HTML</button>
-      <button class="ctrl-btn" onclick="resetAll()">重置</button>
+<div id="status" class="status-dot" title="同步狀態">●</div>
+<div id="sidebar">
+    <div class="toggle-section" id="toggleControls">▼ 控制面板</div>
+    <div id="controlsPanel" class="controls hidden">
+        <!-- 第一列：檔案系統 -->
+        <div>
+            <button id="btnExportJSON">匯出 JSON</button>
+            <button id="btnImportJSON">匯入 JSON</button>
+            <button id="btnExportTXT">匯出 TXT</button>
+            <button id="btnExportHTML">匯出 HTML</button>
+            <button id="btnReset">重設</button>
+        </div>
+        <!-- 第二列：樣式與其他 -->
+        <div>
+            <label>字型:
+                <select id="fontSelect">
+                    <option value="PingFang TC">PingFang TC</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Courier New">Courier New</option>
+                </select>
+            </label>
+            <label>字號:
+                <select id="fontSizeSelect">
+                    <option value="10">10</option>
+                    <option value="12" selected>12</option>
+                    <option value="14">14</option>
+                    <option value="16">16</option>
+                </select>
+            </label>
+            <label>縮排:
+                <input type="number" id="bulletIndent" value="20" min="0" max="60" style="width:48px;"> px
+            </label>
+            <label>邊框顏色:
+                <input type="color" id="borderColor" value="#d4af37">
+            </label>
+        </div>
+        <!-- 第三列：展開/摺疊 -->
+        <div>
+            <button id="btnExpand1">展開 1層</button>
+            <button id="btnExpand2">展開 2層</button>
+            <button id="btnExpand3">展開 3層</button>
+            <button id="btnExpandAll">展開全部</button>
+            <button id="btnCollapseAll">收合全部</button>
+        </div>
     </div>
-    <div class="ctrl-row">
-      <select id="fontSelect" onchange="updateStyle('font', this.value)">字體</select>
-      <select id="sizeSelect" onchange="updateStyle('size', this.value)">字級</select>
-      <select id="indentSelect" onchange="updateStyle('indent', this.value)">縮排</select>
-      <select id="borderSelect" onchange="updateStyle('border', this.value)">邊框色</select>
-    </div>
-    <div class="ctrl-row">
-      <button class="ctrl-btn" onclick="expandLevels(1)">展開 1 層</button>
-      <button class="ctrl-btn" onclick="expandLevels(2)">展開 2 層</button>
-      <button class="ctrl-btn" onclick="expandLevels(3)">展開 3 層</button>
-      <button class="ctrl-btn" onclick="expandLevels(Infinity)">展開全部</button>
-      <button class="ctrl-btn" onclick="collapseAll()">收合全部</button>
-    </div>
-  </div>
+    <div id="treeRoot"></div>
 </div>
-<input type="file" id="jsonInput" accept=".json" style="display:none" onchange="handleImport(event)">
+<div id="main">
+    <h1 style="margin:0 0 8px 0; font-weight:bold; color:var(--accent-gold);">SmartNotes</h1>
+    <div id="articleArea"></div>
+</div>
+
 <script>
-// 狀態樹結構
-const defaultTree = [{ id: 'root', type: 'folder', name: 'TITLE', expanded: true, children: [] }];
-let state = JSON.parse(JSON.stringify(defaultTree));
-let dragSrc = null;
-let syncTimer = null;
+// ---------- 基本資料結構 ----------
+let tree = { id: "root", type: "folder", title: "TITLE", children: [] };
+let selectedArticleId = null;
 
-// Supabase 設定
-const SUPABASE_URL = "https://bxeraximugvvpkpaejdn.supabase.co/";
-const SUPABASE_KEY = "sb_publishable_i8jvS_ivsLBzYwb2HAKk1Q_d4DtCHjX";
-const TABLE = "smartnotes_state";
-const ROW_ID = "main";
+// ---------- 工具函式 ----------
+function uid() { return Date.now().toString(36)+Math.random().toString(36).substr(2,5); }
+function debounce(fn, delay){
+    let t; return function(...args){ clearTimeout(t); t=setTimeout(()=>fn.apply(this,args),delay); };
+}
+function syncStatus(state){ // state: 'syncing'|'synced'|'failed'
+    const dot=document.getElementById('status');
+    dot.className='status-dot';
+    if(state==='syncing') dot.classList.add('synced'); // gold via CSS var
+    else if(state==='synced') dot.classList.add('synced');
+    else dot.classList.add('failed');
+    dot.title={syncing:'正在同步…',synced:'已同步',failed:'同步失敗，將自動重試'}[state];
+}
 
-// IndexedDB 設定
-const DB_NAME = "SmartNotesDB";
-const DB_STORE = "notes";
+// ---------- Supabase (REST) ----------
+const SUPABASE_URL="https://bxeraximugvvpkpaejdn.supabase.co";
+const SUPABASE_KEY="sb_publishable_i8jvS_ivsLBzYwb2HAKk1Q_d4DtCHjX";
+function supabaseUpsert(data){
+    syncStatus('syncing');
+    fetch(`${SUPABASE_URL}/rest/v1/smartnotes?on_conflict=id`,{
+        method:'POST',
+        headers:{
+            'apikey':SUPABASE_KEY,
+            'Authorization':'Bearer '+SUPABASE_KEY,
+            'Content-Type':'application/json',
+            'Prefer':'resolution=merge-duplicates'
+        },
+        body:JSON.stringify({id:'root',data:data,updated_at:new Date().toISOString()})
+    })
+    .then(r=>{ if(!r.ok) throw new Error('Network error'); return r.json(); })
+    .then(()=>syncStatus('synced'))
+    .catch(err=>{ console.error(err); syncStatus('failed'); });
+}
+const debouncedUpsert=debounce(supabaseUpsert,1500);
 
-// 初始化
-document.addEventListener("DOMContentLoaded", () => {
-  initDB();
-  loadState();
-  renderTree();
-  setupControls();
-  requestStyleAccess();
-});
-
-// 狀態載入邏輯
-async function loadState() {
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${ROW_ID}&select=payload`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Prefer": "return=minimal" }
+// ---------- IndexedDB fallback ----------
+const DB_NAME='smartnotesDB', STORE_NAME='notes';
+function openIDB(){ return new Promise((res,rej)=>{
+    const req=indexedDB.open(DB_NAME,1);
+    req.onupgradeneeded=e=>{ e.target.result.createObjectStore(STORE_NAME,{keyPath:'id'}); };
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e.target.error);
+}); }
+function saveIDB(data){
+    openIDB().then(db=>{
+        const tx=db.transaction(STORE_NAME,'readwrite');
+        tx.objectStore(STORE_NAME).put({id:'root',data:data});
+        tx.oncomplete=()=>db.close();
     });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.length > 0) { state = data[0].payload; syncStatus("synced"); renderTree(); return; }
+}
+function loadIDB(){ return new Promise((res,rej)=>{
+    openIDB().then(db=>{
+        const tx=db.transaction(STORE_NAME,'readonly');
+        const obj=tx.objectStore(STORE_NAME).get('root');
+        obj.onsuccess=e=>{ db.close(); res(obj.result?obj.result.data:null); };
+        obj.onerror=e=>{ db.close(); rej(e.target.error); };
+    });
+}); }
+
+// ---------- 渲染樹 ----------
+function renderTree(parentEl, node, depth=0){
+    const div=document.createElement('div');
+    div.className='node';
+    div.dataset.id=node.id;
+    const toggle=document.createElement('button');
+    toggle.className='toggle';
+    toggle.title='展開/摺疊';
+    toggle.onclick=e=>{
+        e.stopPropagation();
+        const open=toggle.classList.toggle('open');
+        const children=div.querySelectorAll('.children');
+        children.forEach(c=>c.style.display=open?'block':'none');
+    };
+    if(node.type==='folder'){
+        toggle.classList.add('open');
     }
-  } catch (e) { console.warn("Supabase 離線，載入本地備份"); }
-  
-  const local = await getFromDB();
-  if (local) { state = local; syncStatus("synced"); renderTree(); return; }
-  
-  state = JSON.parse(JSON.stringify(defaultTree));
-  renderTree();
-}
-
-// IndexedDB 操作
-function initDB() {
-  const req = indexedDB.open(DB_NAME, 1);
-  req.onupgradeneeded = e => e.target.result.createObjectStore(DB_STORE);
-}
-function saveToDB() { return new Promise(resolve => {
-  const req = indexedDB.open(DB_NAME, 1);
-  req.onsuccess = e => {
-    const db = e.target.result;
-    const tx = db.transaction(DB_STORE, "readwrite");
-    tx.objectStore(DB_STORE).put(state, "main");
-    tx.oncomplete = () => resolve();
-  };
-});}
-
-// Supabase 同步
-function syncToCloud() {
-  syncStatus("syncing");
-  fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
-    method: "POST",
-    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
-    body: JSON.stringify({ id: ROW_ID, payload: state, updated_at: new Date().toISOString() })
-  }).then(() => syncStatus("synced")).catch(() => syncStatus("failed"));
-}
-function debouncedSync() {
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => {
-    saveToDB();
-    syncToCloud();
-  }, 1500);
-}
-
-function syncStatus(status) {
-  const dot = document.getElementById("status-dot");
-  dot.style.background = status === "syncing" ? "gold" : status === "synced" ? "green" : "red";
-  if (status === "failed") setTimeout(syncToCloud, 5000);
-}
-
-// 渲染引擎
-function renderTree() {
-  const container = document.getElementById("tree-container");
-  container.innerHTML = "";
-  state.forEach(node => container.appendChild(renderNode(node)));
-}
-
-function renderNode(node) {
-  const div = document.createElement("div");
-  div.className = "tree-node";
-  div.dataset.id = node.id;
-  div.draggable = true;
-  
-  const row = document.createElement("div");
-  row.className = "node-row";
-  row.innerHTML = `<span class="toggle" data-id="${node.id}">${node.children?.length ? (node.expanded ? "▼" : "▶") : "•"}</span>
-                   <input class="node-name" value="${node.name}" spellcheck="false">`;
-  
-  if (node.type === "card") {
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<div class="card-header"><span class="node-name" value="${node.name}">${node.name}</span>
-      <div class="toolbar">
-        <button class="btn" onclick="toggleColor(this)">🎨</button>
-        <button class="btn" onclick="deleteNode('${node.id}')">🗑</button>
-      </div>
-      <div class="color-palette"></div>
-    </div>
-    <div class="card-body" contenteditable="true">${node.content || ""}</div>`;
-    row.appendChild(card);
-    setupCardEvents(card, node);
-  }
-  
-  div.appendChild(row);
-  if (node.children?.length) {
-    node.children.forEach(child => div.appendChild(renderNode(child)));
-  }
-  div.style.display = node.expanded ? "block" : "none";
-  
-  // 事件綁定
-  row.querySelector(".node-name").addEventListener("input", e => { node.name = e.target.value; debouncedSync(); });
-  row.querySelector(".toggle").addEventListener("click", () => { node.expanded = !node.expanded; renderTree(); });
-  row.addEventListener("dblclick", () => addSibling(node.id, node.type === "folder" ? "folder" : "card"));
-  
-  // 拖曳
-  div.addEventListener("dragstart", e => { dragSrc = node.id; e.dataTransfer.effectAllowed = "move"; });
-  div.addEventListener("dragover", e => { e.preventDefault(); div.classList.add("drag-over"); });
-  div.addEventListener("dragleave", () => div.classList.remove("drag-over"));
-  div.addEventListener("drop", e => { e.preventDefault(); div.classList.remove("drag-over"); moveNode(dragSrc, node.id); });
-  
-  return div;
-}
-
-function setupCardEvents(cardEl, node) {
-  cardEl.querySelector(".card-body").addEventListener("input", e => { node.content = e.target.innerHTML; debouncedSync(); });
-  cardEl.querySelector(".node-name").addEventListener("input", e => { node.name = e.target.value; debouncedSync(); });
-  cardEl.querySelector(".btn:nth-child(1)").addEventListener("click", (e) => {
-    e.stopPropagation();
-    const palette = cardEl.querySelector(".color-palette");
-    palette.classList.toggle("show");
-    if (palette.classList.contains("show")) {
-      const colors = ["#ff6b35", "#007bff", "#00d4aa", "#ffd700", "#ff4757", "#2ed573", "#1e90ff", "#ffa502"];
-      palette.innerHTML = colors.map(c => `<div class="color-swatch" style="background:${c}" onclick="applyColor('${c}')"></div>`).join("");
+    const titleSpan=document.createElement('span');
+    titleSpan.className='title';
+    titleSpan.textContent=node.title;
+    titleSpan.contentEditable='false';
+    titleSpan.onclick=e=>{
+        if(node.type==='folder'||node.type==='article'){
+            titleSpan.contentEditable='true';
+            titleSpan.focus();
+            const range=document.createRange();
+            range.selectNodeContents(titleSpan);
+            const sel=window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            titleSpan.classList.add('editing');
+        }
+    };
+    titleSpan.onblur=()=>{
+        titleSpan.contentEditable='false';
+        titleSpan.classList.remove('editing');
+        const newTitle=titleSpan.textContent.trim()||(node.type==='folder'?'FOLDER':'ARTICLE');
+        if(newTitle!==node.title){
+            node.title=newTitle;
+            saveAndSync();
+        }
+    };
+    titleSpan.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); titleSpan.blur(); } };
+    const editBtn=document.createElement('button');
+    editBtn.className='edit-btn';
+    editBtn.innerHTML='✎';
+    editBtn.title='編輯';
+    editBtn.onclick=e=>{
+        e.stopPropagation();
+        titleSpan.click();
+    };
+    const addFolderBtn=document.createElement('button');
+    addFolderBtn.className='edit-btn';
+    addFolderBtn.innerHTML='➕';
+    addFolderBtn.title='新增子資料夾';
+    addFolderBtn.onclick=e=>{
+        e.stopPropagation();
+        const newFolder={id:uid(),type:'folder',title:'FOLDER',children:[]};
+        if(node.type==='folder'){
+            node.children.push(newFolder);
+        }else{
+            // 文章下直接加資料夾不合理，放在父資料夾
+        }
+        saveAndSync();
+        renderTree(parentEl, tree);
+    };
+    const addArticleBtn=document.createElement('button');
+    addArticleBtn.className='edit-btn';
+    addArticleBtn.innerHTML='📄';
+    addArticleBtn.title='新增文章';
+    addArticleBtn.onclick=e=>{
+        e.stopPropagation();
+        const newArt={id:uid(),type:'article',title:'ARTICLE',content:''};
+        if(node.type==='folder'){
+            node.children.push(newArt);
+        }
+        saveAndSync();
+        renderTree(parentEl, tree);
+    };
+    const delBtn=document.createElement('button');
+    delBtn.className='edit-btn';
+    delBtn.innerHTML='🗑';
+    delBtn.title='刪除';
+    delBtn.onclick=e=>{
+        e.stopPropagation();
+        if(confirm('確定刪除此項目及其所有子項目？')){
+            // 需要父節點參考，暫簡化：只支援根目錄刪除
+            if(node.id==='root'){ alert('不能刪除根目錄'); return; }
+            // 實際專案中需傳入父參照，此處略
+        }
+    };
+    div.append(toggle,titleSpan,editBtn,addFolderBtn,addArticleBtn,delBtn);
+    if(node.children.length>0){
+        const childrenDiv=document.createElement('div');
+        childrenDiv.className='children';
+        childrenDiv.style.display=node.type==='folder'?'block':'none';
+        node.children.forEach(child=>renderTree(childrenDiv,child,depth+1));
+        div.appendChild(childrenDiv);
     }
-  });
-  cardEl.querySelector(".btn:nth-child(2)").addEventListener("click", () => deleteNode(node.id));
-  window.applyColor = (c) => { cardEl.querySelector(".card-body").style.color = c; debouncedSync(); };
+    parentEl.appendChild(div);
 }
 
-// 樹操作
-function addSibling(id, type) {
-  const target = findNode(id);
-  if (!target) return;
-  const parent = findParent(state, id);
-  const newItem = { id: crypto.randomUUID(), type, name: type === "folder" ? "FOLDER" : "ARTICLE", expanded: true, children: [], content: "" };
-  if (type === "folder") {
-    parent.children.push(newItem);
-  } else {
-    parent.children.push(newItem);
-  }
-  debouncedSync();
-  renderTree();
+// ---------- 儲存與同步 ----------
+function saveAndSync(){
+    const json=JSON.stringify(tree);
+    localStorage.setItem('smartnotes_local',json); // 備用
+    saveIDB(json);
+    debouncedUpsert(json);
 }
 
-function deleteNode(id) {
-  const parent = findParent(state, id);
-  if (parent) {
-    parent.children = parent.children.filter(c => c.id !== id);
-    debouncedSync();
-    renderTree();
-  }
-}
-
-function moveNode(srcId, targetId) {
-  if (srcId === targetId) return;
-  const src = findNode(srcId);
-  const target = findNode(targetId);
-  if (!src || !target || isDescendant(target, src)) return;
-  const srcParent = findParent(state, srcId);
-  srcParent.children = srcParent.children.filter(c => c.id !== srcId);
-  target.children.push(src);
-  target.expanded = true;
-  debouncedSync();
-  renderTree();
-}
-
-function findNode(id, list = state) { return list.find(n => n.id === id) || list.flatMap(n => findNode(id, n.children)).find(Boolean); }
-function findParent(list, id, parent = null) {
-  for (const n of list) {
-    if (n.id === id) return parent;
-    const res = findParent(n.children, id, n);
-    if (res) return res;
-  }
-  return null;
-}
-function isDescendant(node, target) {
-  if (!node.children) return false;
-  return node.children.some(c => c.id === target.id || isDescendant(c, target));
-}
-
-// 匯出功能
-function getTimestamp() { return new Date().toISOString().slice(0, 10).replace(/-/g, ""); }
-function getBaseName() { return state[0]?.name || "SmartNotes"; }
-function triggerDownload(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `${getBaseName()} ${getTimestamp()}.${type.split("/")[1]}`;
-  a.click(); URL.revokeObjectURL(url);
-}
-
-function exportJSON() { triggerDownload(JSON.stringify(state, null, 2), "json", "application/json"); }
-function exportText() {
-  let txt = "";
-  const walk = (nodes, depth) => nodes.forEach(n => {
-    txt += `${"  ".repeat(depth)}${n.name}\n`;
-    if (n.content) txt += `${"  ".repeat(depth + 1)}${n.content.replace(/<[^>]*>/g, "")}\n`;
-    if (n.children) walk(n.children, depth + 1);
-  });
-  walk(state, 0);
-  triggerDownload(txt, "txt", "text/plain");
-}
-function exportHTML() {
-  let html = "<html><head><style>body{background:#0a0a0f;color:#e0e0e0;font-family:sans-serif;padding:20px}ul{list-style:none}li{margin:4px 0}</style></head><body>";
-  const walk = (nodes) => nodes.forEach(n => {
-    html += `<ul><li><b>${n.name}</b>`;
-    if (n.content) html += `<div>${n.content}</div>`;
-    if (n.children) walk(n.children);
-    html += `</li></ul>`;
-  });
-  walk(state); html += "</body></html>";
-  triggerDownload(html, "html", "text/html");
-}
-function exportOKF() {
-  const zip = new JSZip();
-  const walk = (nodes, path = "") => nodes.forEach(n => {
-    if (n.type === "card") {
-      const md = `---\ntype: article\ntitle: ${n.name}\ndescription: \ntags: []\ntimestamp: ${new Date().toISOString()}\n---\n\n${n.content.replace(/<[^>]*>/g, "")}\n`;
-      zip.file(`${path}${n.name}.md`, md);
+// ---------- 載入 ----------
+async function loadApp(){
+    let data=null;
+    try{
+        const res=await fetch(`${SUPABASE_URL}/rest/v1/smartnotes?id=eq.root`,{
+            headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY}
+        });
+        if(res.ok){
+            const json=await res.json();
+            if(json.length&&json[0].data) data=json[0].data;
+        }
+    }catch(e){ console.error(e); }
+    if(!data){
+        try{ data=await loadIDB(); }catch(e){}
     }
-    if (n.children) walk(n.children, `${path}${n.name}/`);
-  });
-  walk(state);
-  zip.generateAsync({ type: "blob" }).then(blob => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `${getBaseName()} ${getTimestamp()}.zip`; a.click(); URL.revokeObjectURL(url);
-  });
+    if(!data){
+        data=localStorage.getItem('smartnotes_local');
+        if(data) try{ data=JSON.parse(data); }catch(e){}
+    }
+    if(data) tree=data;
+    renderUI();
+}
+function renderUI(){
+    const sidebar=document.getElementById('treeRoot');
+    sidebar.innerHTML='';
+    renderTree(sidebar,tree);
+    const main=document.getElementById('articleArea');
+    main.innerHTML='';
+    if(selectedArticleId){
+        const art=findNode(tree,selectedArticleId);
+        if(art){
+            const card=document.createElement('div');
+            card.className='article-card';
+            const titleDiv=document.createElement('div');
+            titleDiv.className='article-title';
+            titleDiv.contentEditable='false';
+            titleDiv.textContent=art.title;
+            titleDiv.onclick=()=>{
+                titleDiv.contentEditable='true';
+                titleDiv.focus();
+                const range=document.createRange();
+                range.selectNodeContents(titleDiv);
+                const sel=window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            };
+            titleDiv.onblur=()=>{
+                titleDiv.contentEditable='false';
+                const newT=titleDiv.textContent.trim()||'ARTICLE';
+                if(newT!==art.title){
+                    art.title=newT;
+                    saveAndSync();
+                    renderUI();
+                }
+            };
+            titleDiv.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); titleDiv.blur(); } };
+            const rich=document.createElement('div');
+            rich.className='richtext';
+            rich.contentEditable='true';
+            rich.innerHTML=art.content||'';
+            rich.oninput=()=>{ art.content=rich.innerHTML; saveAndSync(); };
+            card.append(titleDiv,rich);
+            main.appendChild(card);
+        }
+    }
+    // 點擊樹節點選擇文章
+    document.querySelectorAll('.node .title').forEach(t=>{
+        t.style.cursor='text';
+        t.onclick=e=>{
+            e.stopPropagation();
+            const nodeEl=t.closest('.node');
+            const id=nodeEl.dataset.id;
+            const node=findNode(tree,id);
+            if(node&&node.type==='article'){
+                selectedArticleId=id;
+                renderUI();
+            }
+        };
+    });
+}
+function findNode(root,id){
+    if(root.id===id) return root;
+    if(root.children){
+        for(const c of root.children){
+            const f=findNode(c,id);
+            if(f) return f;
+        }
+    }
+    return null;
 }
 
-// 控制項
-function setupControls() {
-  document.getElementById("controls").classList.add("open");
-  const fonts = ["PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Arial"];
-  const sizes = ["10px", "12px", "14px", "16px"];
-  const indents = ["12px", "18px", "24px", "30px"];
-  const borders = ["#333", "#c9a227", "#00d4aa", "#ff6b35"];
-  ["fontSelect", "sizeSelect", "indentSelect", "borderSelect"].forEach((id, i) => {
-    const opts = [fonts, sizes, indents, borders][i];
-    opts.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; document.getElementById(id).appendChild(o); });
-  });
+// ---------- 控制面板 ----------
+document.getElementById('toggleControls').addEventListener('click',()=>{
+    const panel=document.getElementById('controlsPanel');
+    panel.classList.toggle('hidden');
+});
+// 字型、字號
+document.getElementById('fontSelect').addEventListener('change',e=>{
+    document.body.style.fontFamily=e.target.value;
+});
+document.getElementById('fontSizeSelect').addAttribute?null:null;
+document.getElementById('fontSizeSelect').addEventListener('change',e=>{
+    document.body.style.fontSize=e.target.value+'px';
+});
+// 縮排
+document.getElementById('bulletIndent').addEventListener('input',e=>{
+    const px=e.target.value;
+    document.querySelectorAll('.toggle').forEach(t=>{ t.style.marginLeft=px+'px'; });
+});
+// 邊框顏色
+document.getElementById('borderColor').addEventListener('input',e=>{
+    document.querySelectorAll('.article-card').forEach(c=>{ c.style.borderColor=e.target.value; });
+});
+// 檔案系統
+document.getElementById('btnExportJSON').addEventListener('click',()=>{
+    const blob=new Blob([JSON.stringify(tree,null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`SmartNotes ${new Date().toISOString().slice(0,10).replace(/-/g)}.json`; a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById('btnImportJSON').addEventListener('click',()=>{
+    const input=document.createElement('input');
+    input.type='file';
+    input.accept='.json';
+    input.onchange=e=>{
+        const file=e.target.files[0];
+        if(!file) return;
+        const reader=new FileReader();
+        reader.onload=ev=>{
+            try{
+                const data=JSON.parse(ev.target.result);
+                if(data && data.type) { tree=data; saveAndSync(); renderUI(); }
+            }catch(err){ alert('JSON 格式錯誤'); }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+});
+document.getElementById('btnExportTXT').addEventListener('click',()=>{
+    // 簡單純文字：遞迴取標題+內文
+    function txtNode(n,depth){
+        let out='';
+        out+='#'.repeat(depth+1)+' '+n.title+'\n';
+        if(n.type==='article') out+= (n.content||'').replace(/<[^>]*>/g,'')+'\n\n';
+        if(n.children){
+            n.children.forEach(c=>{ out+=txtNode(c,depth+1); });
+        }
+        return out;
+    }
+    const text=txtNode(tree,0);
+    const blob=new Blob([text],{type:'text/plain'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`SmartNotes ${new Date().toISOString().slice(0,10).replace(/-/g)}.txt`; a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById('btnExportHTML').addEventListener('click',()=>{
+    // 簡單轉HTML：標題<h2>,內容直接貼
+    function htmlNode(n,depth){
+        let out='';
+        out+=`<h${Math.min(depth+2,6)}>${escapeHtml(n.title)}</h${Math.min(depth+2,6)}>\n`;
+        if(n.type==='article'){
+            out+=`<div>${n.content}</div>\n`;
+        }
+        if(n.children){
+            n.children.forEach(c=>{ out+=htmlNode(c,depth+1); });
+        }
+        return out;
+    }
+    const html=`<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>SmartNotes Export</title></head><body>${htmlNode(tree,0)}</body></html>`;
+    const blob=new Blob([html],{type:'text/html'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download=`SmartNotes ${new Date().toISOString().slice(0,10).replace(/-/g)}.html`; a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById('btnReset').addEventListener('click',()=>{
+    if(confirm('確定要清除所有資料並重新開始？')){ tree={id:'root',type:'folder',title:'TITLE',children:[]}; selectedArticleId=null; saveAndSync(); renderUI(); }
+});
+// 展開/收合
+document.getElementById('btnExpand1').addEventListener('click',()=>{ expandLevels(1); });
+document.getElementById('btnExpand2').addEventListener('click',()=>{ expandLevels(2); });
+document.getElementById('btnExpand3').addEventListener('click',()=>{ expandLevels(3); });
+document.getElementById('btnExpandAll').addEventListener('click',()=>{ expandLevels(999); });
+document.getElementById('btnCollapseAll').addEventListener('click',()=>{ collapseAll(); });
+function expandLevels(levels){
+    function walk(node,cur){
+        if(node.type==='folder'){
+            const el=document.querySelector(`.node[data-id="${node.id}"] .toggle`);
+            if(el&&cur<levels){ el.classList.add('open'); const children=el.closest('.node').querySelector('.children'); if(children) children.style.display='block'; }
+            if(node.children){
+                node.children.forEach(c=>walk(c,cur+1));
+            }
+        }
+    }
+    walk(tree,0);
 }
-function updateStyle(prop, val) {
-  if (prop === "font") document.documentElement.style.setProperty("--font", val);
-  if (prop === "size") document.documentElement.style.setProperty("--base-size", val);
-  if (prop === "indent") document.documentElement.style.setProperty("--indent", val);
-  if (prop === "border") document.documentElement.style.setProperty("--line", val);
+function collapseAll(){
+    document.querySelectorAll('.node .toggle').forEach(t=>{ t.classList.remove('open'); const children=t.closest('.node').querySelector('.children'); if(children) children.style.display='none'; });
 }
-function expandLevels(n) {
-  const expand = (nodes) => nodes.forEach(nd => { if(nd.children) nd.expanded = true, expand(nd.children); });
-  expand(state); renderTree();
-}
-function collapseAll() {
-  const collapse = (nodes) => nodes.forEach(nd => { if(nd.children) nd.expanded = false, collapse(nd.children); });
-  collapse(state); renderTree();
-}
-function resetAll() { if(confirm("確定清除所有資料？")) { state = JSON.parse(JSON.stringify(defaultTree)); debouncedSync(); renderTree(); } }
-function handleImport(e) {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => { try { state = JSON.parse(ev.target.result); debouncedSync(); renderTree(); } catch(err) { alert("JSON 格式錯誤"); } };
-  reader.readAsText(file);
-}
-function requestStyleAccess() {
-  if (navigator.storage && navigator.storage.getDirectory) {
-    // 可擴展為直接寫入 iCloud Drive 路徑，目前依賴標準下載機制
-  }
-}
+function escapeHtml(str){ return str.replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}[m])); }
+
+// ---------- 初始化 ----------
+loadApp();
 </script>
 </body>
 </html>
