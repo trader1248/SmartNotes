@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -278,7 +278,10 @@ function mkTb(txt, title, fn){
   b.onclick = fn;
   return b;
 }
-function exec(cmd, val){ document.execCommand(cmd, false, val || null); }
+function exec(cmd, val){
+  try{ document.execCommand("styleWithCSS", false, true); }catch(e){}
+  document.execCommand(cmd, false, val || null);
+}
 
 /* ================= Colour palette (2D) ================= */
 const HUES = ["#ff9b3d","#ffd54a","#f5e663","#9ee06a","#4dd9c0","#4db8ff","#7a8cff","#c88bff","#ff7ab0","#ff6b5e"];
@@ -290,9 +293,12 @@ function shade(hex, f){
   return "#" + [r,g,b].map(x=>Math.min(255,Math.max(0,fn(x))).toString(16).padStart(2,"0")).join("");
 }
 const palEl = document.getElementById('palette');
-let palCb = null;
+let palCb = null, palRange = null;
+palEl.addEventListener('mousedown', e => e.preventDefault()); /* keep focus & selection in editor */
 function openPalette(anchor, cb){
   palCb = cb;
+  const sel = window.getSelection();
+  palRange = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
   palEl.innerHTML = "";
   [0.35, 0, -0.3].forEach(f => {
     const r = document.createElement('div'); r.className = "prow";
@@ -300,7 +306,14 @@ function openPalette(anchor, cb){
       const c = shade(h, f);
       const s = document.createElement('div');
       s.className = "sw"; s.style.background = c; s.title = c;
-      s.onclick = () => { palEl.style.display = "none"; palCb && palCb(c); };
+      s.onclick = () => {
+        palEl.style.display = "none";
+        if(palRange){
+          const sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(palRange);
+        }
+        palCb && palCb(c);
+      };
       r.appendChild(s);
     });
     palEl.appendChild(r);
