@@ -2,526 +2,554 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>文章卡片樹</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Article Tree</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.7/supabase.min.js"
-        onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';document.head.appendChild(s);"></script>
 <style>
 :root{
-  --bg:#14120e; --panel:#1b1813; --gold:#d4af37; --gold-dim:#8a7327;
-  --line:#3d3624; --text:#e9e2d0; --muted:#8d8468;
-  --font:'PingFang TC','PingFang HK','Microsoft JhengHei',sans-serif;
-  --fs:12px; --indent:18px;
+  --gold:#d4af37;
+  --gold-dim:#8a7326;
+  --bg:#12100b;
+  --bg-card:#1a1712;
+  --text:#e9e2cf;
+  --text-dim:#9a927c;
+  --indent:18px;
+  --fsize:12px;
+  --ffam:"PingFang TC","-apple-system","Noto Sans TC",sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:var(--fs);line-height:1.35}
-body{min-height:100vh;display:flex;flex-direction:column}
+html,body{background:var(--bg);color:var(--text);font-family:var(--ffam);font-size:var(--fsize);line-height:1.25}
+body{padding:10px 14px 120px 10px;min-height:100vh}
 
 /* ---------- header ---------- */
-header{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)}
-header .app{font-weight:600;color:var(--gold);letter-spacing:.5px}
-header .sp{flex:1}
-#dot{width:9px;height:9px;border-radius:50%;background:#666;flex:none;transition:background .2s}
-#dot.ok{background:#4caf6d;box-shadow:0 0 4px #4caf6d}
-#dot.sync{background:var(--gold);box-shadow:0 0 5px var(--gold)}
-#dot.err{background:#d05045;box-shadow:0 0 5px #d05045}
-#dot.local{background:#777}
-#dotLabel{color:var(--muted);font-size:11px}
+#topbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;border-bottom:1px solid var(--gold-dim);padding-bottom:5px}
+#appTitle{font-weight:bold;color:var(--gold);font-size:calc(var(--fsize) + 1px);letter-spacing:.5px}
+#syncDot{width:9px;height:9px;border-radius:50%;background:#666;margin-left:auto;flex:0 0 auto;transition:background .3s, box-shadow .3s}
+#syncDot.syncing{background:var(--gold);box-shadow:0 0 6px var(--gold)}
+#syncDot.ok{background:#3fbf6f;box-shadow:0 0 5px #3fbf6f66}
+#syncDot.fail{background:#e05545;box-shadow:0 0 6px #e05545}
+#syncLabel{color:var(--text-dim);font-size:calc(var(--fsize) - 2px)}
 
 /* ---------- tree ---------- */
-main{flex:1;padding:8px 12px 90px;overflow:auto}
+#tree{text-align:left}
 .node{margin:0}
-.kids{margin-left:var(--indent);border-left:1px solid var(--line);padding-left:8px}
-.row{display:flex;align-items:center;gap:6px;padding:1px 2px;border-radius:4px;min-height:20px}
-.row:hover{background:rgba(212,175,55,.05)}
-.tog{width:8px;height:8px;border-radius:50%;background:var(--gold);flex:none;cursor:pointer;transition:box-shadow .15s}
-.tog.halo{box-shadow:0 0 0 3.5px rgba(212,175,55,.18)}
-.tog.leafdot{background:var(--gold-dim)}
-.title{font-weight:700;outline:none;padding:0 2px;border-radius:3px;min-width:1em;white-space:pre-wrap}
-.title:focus{background:rgba(212,175,55,.08)}
-.title:empty:before{content:attr(data-ph);color:var(--muted);font-weight:400}
-.acts{display:flex;gap:2px;opacity:0;transition:opacity .12s;flex:none}
-.row:hover .acts,.row:focus-within .acts{opacity:1}
-.ib{width:18px;height:18px;display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--muted);cursor:pointer;border-radius:3px;padding:0}
-.ib:hover{color:var(--gold);background:rgba(212,175,55,.1)}
-.ib svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-.grip{cursor:grab}
+.node .children{margin-left:var(--indent);border-left:1px solid color-mix(in srgb, var(--gold) 28%, transparent);padding-left:6px}
+.row{display:flex;align-items:center;gap:5px;padding:1px 2px;border-radius:4px;min-height:20px}
+.row:hover{background:#ffffff08}
+.row.dragover{outline:1px dashed var(--gold);outline-offset:-1px}
 
-/* card body */
-.cardbody{margin:2px 0 4px calc(var(--indent) - 4px)}
-.card{border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:5px 8px}
-.toolbar{display:flex;gap:2px;margin-bottom:3px;border-bottom:1px solid var(--line);padding-bottom:3px}
-.toolbar.hide{display:none}
-.tb{min-width:20px;height:18px;border:none;background:none;color:var(--muted);cursor:pointer;border-radius:3px;font-size:11px;padding:0 3px;font-family:var(--font)}
-.tb:hover{color:var(--gold);background:rgba(212,175,55,.1)}
-.rt{outline:none;min-height:1.4em}
-.rt:empty:before{content:'輸入內容…';color:var(--muted)}
-.rt ul,.rt ol{margin-left:calc(var(--indent) + 2px)}
+/* toggle bullet with halo */
+.tgl{flex:0 0 auto;width:14px;height:14px;border:none;background:none;cursor:pointer;position:relative;padding:0}
+.tgl::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:var(--gold)}
+.tgl.closed::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:color-mix(in srgb, var(--gold) 22%, transparent);box-shadow:0 0 5px color-mix(in srgb, var(--gold) 45%, transparent)}
+.tgl:hover::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:color-mix(in srgb, var(--gold) 30%, transparent)}
+.tgl.leafless{visibility:hidden}
+
+.ntitle{font-weight:bold;outline:none;padding:0 3px;border-radius:3px;min-width:24px;cursor:text;white-space:pre-wrap}
+.ntitle:focus{background:#ffffff10;box-shadow:0 0 0 1px var(--gold-dim)}
+.node.folder > .row > .ntitle{color:var(--gold)}
+.node.card > .row > .ntitle{color:var(--text)}
+.drag{flex:0 0 auto;cursor:grab;color:var(--text-dim);font-size:10px;opacity:0;padding:0 1px;user-select:none}
+.row:hover .drag{opacity:.8}
+
+/* hover-reveal edit buttons on the same line */
+.rowbtns{display:flex;gap:2px;opacity:0;transition:opacity .12s;flex:0 0 auto}
+.row:hover .rowbtns, .row:focus-within .rowbtns{opacity:1}
+.ib{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;width:17px;height:17px;line-height:17px;border-radius:3px;padding:0;font-family:var(--ffam)}
+.ib:hover{color:var(--gold);background:#ffffff10}
+.ib.del:hover{color:#e05545}
+
+/* article card body */
+.cardbody{margin:2px 0 4px calc(var(--indent) + 4px)}
+.cardbox{background:var(--bg-card);border:1px solid color-mix(in srgb, var(--gold) 35%, transparent);border-radius:7px;padding:6px 9px;max-width:720px}
+.rt{outline:none;min-height:16px}
+.rt ul{padding-left:var(--indent);margin:0}
+.rt ol{padding-left:var(--indent);margin:0}
 .rt li{margin:0}
-.rt b,.rt strong{color:#f2e6bf}
+.rt:empty::before{content:"內容⋯";color:var(--text-dim)}
 
-/* drag */
-.drag-over-top{box-shadow:0 -2px 0 var(--gold)}
-.drag-over-bottom{box-shadow:0 2px 0 var(--gold)}
-.drag-over-into{outline:1px dashed var(--gold);outline-offset:-1px}
-.dragging{opacity:.4}
+/* rich-text toolbar */
+.rtbar{display:none;gap:2px;margin-bottom:4px;flex-wrap:wrap;border-bottom:1px solid #ffffff12;padding-bottom:3px}
+.rtbar.show{display:flex}
+.rtbar .ib{width:19px}
+.hl{width:14px;height:14px;border-radius:3px;border:1px solid #0006;cursor:pointer;padding:0;margin:1px}
+.hl.o{background:#ff8c1a}.hl.t{background:#1fd6c9}.hl.b{background:#3d8bff}.hl.g{background:#3fbf6f}.hl.p{background:#b06ce8}.hl.r{background:#ef5350}
+.hl.x{background:transparent;color:var(--text-dim);font-size:9px;line-height:12px}
 
-/* ---------- footer controls ---------- */
-#ctlToggle{position:fixed;right:10px;bottom:0;z-index:11;border:1px solid var(--line);border-bottom:none;background:var(--panel);color:var(--gold);cursor:pointer;border-radius:6px 6px 0 0;padding:1px 10px;font-size:11px}
-footer{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:5px 10px 7px;z-index:10}
-footer.hide{display:none}
-.crow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:2px 0}
-.crow+.crow{border-top:1px dashed var(--line)}
-.crow .lab{color:var(--muted);font-size:11px;flex:none}
-.btn{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);background:none;color:var(--text);cursor:pointer;border-radius:5px;padding:2px 8px;font-size:11px;font-family:var(--font)}
-.btn:hover{border-color:var(--gold);color:var(--gold)}
-.btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-select,input[type=color]{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:5px;font-size:11px;padding:1px 3px;font-family:var(--font)}
-input[type=color]{width:26px;height:20px;padding:0}
+/* ---------- bottom control panel ---------- */
+#panelToggle{position:fixed;right:12px;bottom:12px;z-index:30;width:28px;height:28px;border-radius:50%;background:var(--bg-card);border:1px solid var(--gold-dim);color:var(--gold);cursor:pointer;font-size:13px}
+#panelToggle:hover{box-shadow:0 0 6px color-mix(in srgb, var(--gold) 50%, transparent)}
+#panel{position:fixed;left:0;right:0;bottom:0;background:#171410ee;border-top:1px solid var(--gold-dim);backdrop-filter:blur(4px);padding:5px 10px 7px;z-index:20;display:flex;flex-direction:column;gap:4px}
+#panel.hidden{display:none}
+.prow{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.plabel{color:var(--text-dim);font-size:calc(var(--fsize) - 2px);width:34px;flex:0 0 auto}
+.pb{background:var(--bg-card);border:1px solid var(--gold-dim);color:var(--text);border-radius:4px;padding:2px 7px;cursor:pointer;font-family:var(--ffam);font-size:var(--fsize);display:inline-flex;align-items:center;gap:4px}
+.pb:hover{border-color:var(--gold);color:var(--gold)}
+.pb svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+select.pb, input.pb{padding:2px 4px}
+input[type=color].pb{width:34px;height:22px;padding:1px}
 
-/* settings pop */
-#cfg{position:fixed;top:34px;right:10px;background:var(--panel);border:1px solid var(--gold-dim);border-radius:6px;padding:8px;z-index:20;display:none;width:260px}
-#cfg.show{display:block}
-#cfg input[type=text],#cfg input[type=password]{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:3px 5px;font-size:11px;margin:2px 0 6px;font-family:monospace}
-#cfg .lab{color:var(--muted);font-size:11px}
+dialog{background:var(--bg-card);color:var(--text);border:1px solid var(--gold-dim);border-radius:8px;padding:14px 16px;font-family:var(--ffam);font-size:var(--fsize);max-width:320px}
+dialog::backdrop{background:#000a}
 </style>
 </head>
 <body>
 
-<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
-  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="10" x2="17" y2="10"/><line x1="7" y1="14" x2="13" y2="14"/></symbol>
-  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
-  <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
-  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
-  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
-  <symbol id="i-fmt" viewBox="0 0 24 24"><path d="M6 20 12 4l6 16M8.5 14h7"/></symbol>
-  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></symbol>
-  <symbol id="i-ul" viewBox="0 0 24 24"><path d="M3 21V3m18 4L9 7m12 5H9m12 5H9"/></symbol>
-  <symbol id="i-txt" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
-  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></symbol>
-  <symbol id="i-zip" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM12 4v4m0 2v2m0 2v2"/></symbol>
-  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9l2.1 2.1m10 10 2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></symbol>
-  <symbol id="i-exp" viewBox="0 0 24 24"><path d="M7 9l5 5 5-5"/></symbol>
-  <symbol id="i-col" viewBox="0 0 24 24"><path d="M7 15l5-5 5 5"/></symbol>
-</svg>
-
-<header>
-  <span class="app">文章卡片樹</span>
-  <span class="sp"></span>
-  <span id="dotLabel">本機</span><span id="dot" class="local" title="同步狀態"></span>
-  <button class="ib" id="btnCfg" title="Supabase 設定"><svg><use href="#i-gear"/></svg></button>
-</header>
-
-<div id="cfg">
-  <div class="lab">Supabase URL</div>
-  <input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co">
-  <div class="lab">Anon Key</div>
-  <input type="password" id="cfgKey" placeholder="eyJhbGciOi...">
-  <div class="lab" style="margin-bottom:6px">需先建表:create table article_tree (id text primary key, data jsonb, updated_at timestamptz);並設 RLS 政策。留空 = 只用本機儲存。</div>
-  <button class="btn" id="cfgSave">儲存並連線</button>
+<div id="topbar">
+  <span id="appTitle">Article Tree</span>
+  <span id="syncLabel"></span>
+  <span id="syncDot" title="同步狀態"></span>
 </div>
 
-<main id="tree"></main>
+<div id="tree"></div>
 
-<button id="ctlToggle" title="顯示/隱藏控制列">⌃ 控制列</button>
-<footer id="controls" class="hide">
-  <div class="crow">
-    <span class="lab">檔案</span>
-    <button class="btn" id="btnExpJson"><svg><use href="#i-dl"/></svg>匯出 JSON</button>
-    <button class="btn" id="btnImpJson"><svg><use href="#i-card"/></svg>匯入 JSON</button>
-    <button class="btn" id="btnExpTxt"><svg><use href="#i-txt"/></svg>匯出文字</button>
-    <button class="btn" id="btnExpMd"><svg><use href="#i-txt"/></svg>匯出 Markdown</button>
-    <button class="btn" id="btnExpOkf"><svg><use href="#i-zip"/></svg>匯出 OKF Bundle</button>
-    <button class="btn" id="btnReset"><svg><use href="#i-reset"/></svg>重設</button>
-    <input type="file" id="fileImp" accept=".json,application/json" style="display:none">
+<button id="panelToggle" title="顯示/隱藏控制列">⚙</button>
+<div id="panel">
+  <div class="prow">
+    <span class="plabel">檔案</span>
+    <button class="pb" onclick="exportJSON()"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>Export JSON</button>
+    <button class="pb" onclick="importJSON()"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 21h16"/></svg>Import JSON</button>
+    <button class="pb" onclick="exportMD()"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7"/></svg>Export Markdown</button>
+    <button class="pb" onclick="exportText()"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Export Text</button>
+    <button class="pb" onclick="exportHTML()"><svg viewBox="0 0 24 24"><path d="M8 4l-5 8 5 8M16 4l5 8-5 8"/></svg>Export HTML</button>
+    <button class="pb" onclick="exportOKF()"><svg viewBox="0 0 24 24"><path d="M3 7l3-3h12l3 3v13H3zM3 7h18M12 11v6m0 0l-3-3m3 3l3-3"/></svg>OKF Bundle</button>
+    <button class="pb" onclick="resetAll()" style="margin-left:auto;color:#e08575"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-8 0l1 13h8l1-13"/></svg>Reset</button>
   </div>
-  <div class="crow">
-    <span class="lab">樣式</span>
-    <select id="selFont">
-      <option value="'PingFang TC','PingFang HK','Microsoft JhengHei',sans-serif">PingFang TC</option>
-      <option value="'Songti TC','Noto Serif TC',serif">Songti TC</option>
-      <option value="'Helvetica Neue',Helvetica,Arial,sans-serif">Helvetica Neue</option>
-      <option value="Georgia,'Times New Roman',serif">Georgia</option>
-      <option value="Menlo,Consolas,monospace">Monospace</option>
+  <div class="prow">
+    <span class="plabel">樣式</span>
+    <select class="pb" id="selFont" onchange="setSetting('font',this.value)">
+      <option value='"PingFang TC","-apple-system","Noto Sans TC",sans-serif'>PingFang TC</option>
+      <option value='"Noto Sans TC",sans-serif'>Noto Sans TC</option>
+      <option value='"Noto Serif TC","Songti TC",serif'>Noto Serif TC</option>
+      <option value='"Heiti TC",sans-serif'>Heiti TC</option>
+      <option value='Georgia,serif'>Georgia</option>
+      <option value='Menlo,monospace'>Menlo</option>
     </select>
-    <select id="selSize"><option>10</option><option>11</option><option selected>12</option><option>13</option><option>14</option><option>16</option></select>
-    <span class="lab">縮排</span>
-    <select id="selIndent"><option>12</option><option>16</option><option selected>18</option><option>22</option><option>26</option><option>32</option></select>
-    <span class="lab">邊框色</span>
-    <input type="color" id="inBorder" value="#3d3624">
+    <select class="pb" id="selSize" onchange="setSetting('size',this.value)">
+      <option>11</option><option selected>12</option><option>13</option><option>14</option><option>16</option><option>18</option>
+    </select>
+    <select class="pb" id="selIndent" onchange="setSetting('indent',this.value)">
+      <option value="12">縮排 12px</option><option value="18" selected>縮排 18px</option><option value="24">縮排 24px</option><option value="32">縮排 32px</option>
+    </select>
+    <input type="color" class="pb" id="selBorder" value="#d4af37" title="邊框顏色" onchange="setSetting('border',this.value)">
   </div>
-  <div class="crow">
-    <span class="lab">展開</span>
-    <button class="btn" id="ex1" title="展開 1 層"><svg><use href="#i-exp"/></svg>1</button>
-    <button class="btn" id="ex2" title="展開 2 層"><svg><use href="#i-exp"/></svg>2</button>
-    <button class="btn" id="ex3" title="展開 3 層"><svg><use href="#i-exp"/></svg>3</button>
-    <button class="btn" id="exAll" title="展開全部"><svg><use href="#i-exp"/></svg>全部</button>
-    <button class="btn" id="colAll" title="收合全部"><svg><use href="#i-col"/></svg>收合</button>
+  <div class="prow">
+    <span class="plabel">展開</span>
+    <button class="pb" title="展開 1 層" onclick="expandLevel(1)"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>1</button>
+    <button class="pb" title="展開 2 層" onclick="expandLevel(2)"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>2</button>
+    <button class="pb" title="展開 3 層" onclick="expandLevel(3)"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>3</button>
+    <button class="pb" title="全部展開" onclick="expandLevel(99)"><svg viewBox="0 0 24 24"><path d="M6 5l6 6 6-6M6 13l6 6 6-6"/></svg>全部</button>
+    <button class="pb" title="全部收合" onclick="collapseAll()"><svg viewBox="0 0 24 24"><path d="M6 19l6-6 6 6M6 11l6-6 6 6"/></svg>收合</button>
   </div>
-</footer>
+</div>
+
+<input type="file" id="fileInput" accept=".json,application/json" style="display:none">
 
 <script>
-'use strict';
-/* ============ model ============ */
-const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2));
-const freshTree = () => ({ id: 'root', type: 'folder', title: '根目錄', collapsed: false, children: [] });
-let tree = freshTree();
+/* ================= Supabase / storage config ================= */
+const SB_URL = "https://bxeraximugvvpkpaejdn.supabase.co";
+const SB_KEY = "sb_publishable_i8jvS_ivsLBzYwb2HAKk1Q_d4DtCHjX";
+const SB_TABLE = "article_tree";     // single table: id text PK, data jsonb, updated_at timestamptz
+const DOC_ID = "main";
 
-function locate(id, node = tree, parent = null) {
-  if (node.id === id) return { node, parent };
-  for (const c of (node.children || [])) { const r = locate(id, c, node); if (r) return r; }
+/* ================= state ================= */
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+function freshState(){
+  return {
+    settings:{ font:'"PingFang TC","-apple-system","Noto Sans TC",sans-serif', size:"12", indent:"18", border:"#d4af37" },
+    tree:{ id:uid(), type:"folder", title:"根資料夾", collapsed:false, children:[] }
+  };
+}
+let state = freshState();
+
+/* ================= IndexedDB fallback ================= */
+function idb(){
+  return new Promise((res,rej)=>{
+    try{
+      const r = indexedDB.open("articleTreeDB",1);
+      r.onupgradeneeded = e => e.target.result.createObjectStore("kv");
+      r.onsuccess = e => res(e.target.result);
+      r.onerror = e => rej(e);
+    }catch(e){ rej(e); }
+  });
+}
+async function idbSave(){
+  try{
+    const db = await idb();
+    db.transaction("kv","readwrite").objectStore("kv").put(JSON.parse(JSON.stringify(state)), DOC_ID);
+  }catch(e){ /* environment without IndexedDB — cloud sync still works */ }
+}
+async function idbLoad(){
+  try{
+    const db = await idb();
+    return await new Promise(res=>{
+      const q = db.transaction("kv").objectStore("kv").get(DOC_ID);
+      q.onsuccess = ()=>res(q.result || null);
+      q.onerror = ()=>res(null);
+    });
+  }catch(e){ return null; }
+}
+
+/* ================= Supabase sync (debounced, no save button) ================= */
+const dot = document.getElementById("syncDot");
+const syncLabel = document.getElementById("syncLabel");
+let debounceTimer = null, retryTimer = null, dirty = false;
+
+function setDot(cls,label){ dot.className = cls; syncLabel.textContent = label || ""; }
+
+function markDirty(){
+  dirty = true;
+  idbSave();                              // immediate local fallback
+  setDot("syncing","同步中");
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(pushCloud, 1500);   // 1.5s debounce
+}
+
+async function pushCloud(){
+  clearTimeout(retryTimer);
+  setDot("syncing","同步中");
+  try{
+    const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?on_conflict=id`,{
+      method:"POST",
+      headers:{
+        apikey:SB_KEY, Authorization:`Bearer ${SB_KEY}`,
+        "Content-Type":"application/json", Prefer:"resolution=merge-duplicates"
+      },
+      body: JSON.stringify([{ id:DOC_ID, data:state, updated_at:new Date().toISOString() }])
+    });
+    if(!r.ok) throw new Error(r.status);
+    dirty = false;
+    setDot("ok","已同步");
+  }catch(e){
+    setDot("fail","失敗,5 秒後重試");
+    retryTimer = setTimeout(pushCloud, 5000);    // auto retry every 5s
+  }
+}
+
+async function pullCloud(){
+  const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=eq.${DOC_ID}&select=data`,{
+    headers:{ apikey:SB_KEY, Authorization:`Bearer ${SB_KEY}` }
+  });
+  if(!r.ok) throw new Error(r.status);
+  const rows = await r.json();
+  return rows.length ? rows[0].data : null;
+}
+
+/* ================= settings ================= */
+function applySettings(){
+  const s = state.settings;
+  const rt = document.documentElement.style;
+  rt.setProperty("--ffam", s.font);
+  rt.setProperty("--fsize", s.size + "px");
+  rt.setProperty("--indent", s.indent + "px");
+  rt.setProperty("--gold", s.border);
+  document.getElementById("selFont").value = s.font;
+  document.getElementById("selSize").value = s.size;
+  document.getElementById("selIndent").value = s.indent;
+  document.getElementById("selBorder").value = s.border;
+}
+function setSetting(k,v){ state.settings[k]=v; applySettings(); markDirty(); }
+
+/* ================= tree helpers ================= */
+function findParent(node, id, parent=null){
+  if(node.id===id) return {node,parent};
+  for(const c of (node.children||[])){
+    const r = findParent(c,id,node);
+    if(r) return r;
+  }
   return null;
 }
-function isDescendant(ancestor, id) {
-  for (const c of (ancestor.children || [])) { if (c.id === id || isDescendant(c, id)) return true; }
-  return false;
+function isDescendant(anc,id){
+  if(anc.id===id) return true;
+  return (anc.children||[]).some(c=>isDescendant(c,id));
 }
-function walk(node, fn, depth = 0) { fn(node, depth); (node.children || []).forEach(c => walk(c, fn, depth + 1)); }
 
-/* ============ render ============ */
-const $tree = document.getElementById('tree');
-const icon = n => `<svg><use href="#${n}"/></svg>`;
-
-function render() {
-  $tree.innerHTML = '';
-  $tree.appendChild(renderNode(tree, 0));
+/* ================= render ================= */
+const treeEl = document.getElementById("tree");
+function render(){
+  treeEl.innerHTML = "";
+  treeEl.appendChild(renderNode(state.tree, true));
 }
-function renderNode(node, depth) {
-  const wrap = document.createElement('div');
-  wrap.className = 'node'; wrap.dataset.id = node.id;
 
-  const row = document.createElement('div');
-  row.className = 'row'; row.dataset.id = node.id;
+function renderNode(n, isRoot=false){
+  const wrap = document.createElement("div");
+  wrap.className = "node " + n.type;
+  wrap.dataset.id = n.id;
 
-  // toggle bullet
-  const tog = document.createElement('span');
-  tog.className = 'tog' + (node.collapsed ? ' halo' : '') + ((node.type === 'folder' && !(node.children||[]).length) ? ' leafdot' : '');
-  tog.title = node.collapsed ? '展開' : '收合';
-  tog.onclick = () => { node.collapsed = !node.collapsed; render(); scheduleSync(); };
-  row.appendChild(tog);
+  const row = document.createElement("div");
+  row.className = "row";
 
-  // title
-  const t = document.createElement('span');
-  t.className = 'title'; t.contentEditable = 'true'; t.spellcheck = false;
-  t.dataset.ph = node.type === 'folder' ? '未命名資料夾' : '未命名文章';
-  t.textContent = node.title || '';
-  t.oninput = () => { node.title = t.textContent; scheduleSync(); };
-  t.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); t.blur(); } };
+  /* toggle bullet */
+  const tgl = document.createElement("button");
+  tgl.className = "tgl" + (n.collapsed ? " closed" : "");
+  const hasBody = n.type==="card" || (n.children && n.children.length);
+  if(!hasBody) tgl.classList.add("leafless");
+  tgl.onclick = () => { n.collapsed = !n.collapsed; render(); markDirty(); };
+  row.appendChild(tgl);
+
+  /* drag handle */
+  if(!isRoot){
+    const dh = document.createElement("span");
+    dh.className = "drag"; dh.textContent = "⋮⋮"; dh.draggable = true;
+    dh.addEventListener("dragstart", e=>{ e.dataTransfer.setData("text/id", n.id); e.dataTransfer.effectAllowed="move"; });
+    row.appendChild(dh);
+  }
+
+  /* editable title */
+  const t = document.createElement("span");
+  t.className = "ntitle"; t.contentEditable = "true"; t.spellcheck = false;
+  t.textContent = n.title;
+  t.addEventListener("input", ()=>{ n.title = t.textContent; markDirty(); });
+  t.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); t.blur(); } });
   row.appendChild(t);
 
-  // action icons (hidden until hover)
-  const acts = document.createElement('span');
-  acts.className = 'acts';
-  const mk = (ic, tip, fn) => { const b = document.createElement('button'); b.className = 'ib'; b.title = tip; b.innerHTML = icon(ic); b.onclick = fn; return b; };
-
-  if (node.type === 'folder') {
-    acts.appendChild(mk('i-card', '新增文章卡', () => {
-      node.children.push({ id: uid(), type: 'card', title: '', content: '', collapsed: false, showToolbar: false, children: [] });
-      node.collapsed = false; render(); scheduleSync();
-    }));
-    acts.appendChild(mk('i-folder', '新增子資料夾', () => {
-      node.children.push({ id: uid(), type: 'folder', title: '', collapsed: false, children: [] });
-      node.collapsed = false; render(); scheduleSync();
-    }));
-  } else {
-    acts.appendChild(mk('i-fmt', '格式工具列', () => { node.showToolbar = !node.showToolbar; node.collapsed = false; render(); }));
+  /* same-line hover buttons */
+  const btns = document.createElement("span");
+  btns.className = "rowbtns";
+  if(n.type==="folder"){
+    btns.appendChild(iBtn("✚","新增文章卡", ()=>{ n.children.push({id:uid(),type:"card",title:"新文章",html:"",collapsed:false}); n.collapsed=false; render(); markDirty(); }));
+    btns.appendChild(iBtn("▣","新增子資料夾", ()=>{ n.children.push({id:uid(),type:"folder",title:"新資料夾",collapsed:false,children:[]}); n.collapsed=false; render(); markDirty(); }));
+  }else{
+    btns.appendChild(iBtn("Aa","顯示/隱藏格式列", ()=>{ wrap.querySelector(".rtbar")?.classList.toggle("show"); if(n.collapsed){n.collapsed=false;render();markDirty();document.querySelector(`[data-id="${n.id}"] .rtbar`)?.classList.add("show");} }));
   }
-  if (node.id !== 'root') {
-    acts.appendChild(mk('i-trash', '刪除', () => {
-      if (!confirm('刪除「' + (node.title || '未命名') + '」及其所有內容?')) return;
-      const loc = locate(node.id); loc.parent.children = loc.parent.children.filter(c => c.id !== node.id);
-      render(); scheduleSync();
-    }));
-    const g = mk('i-grip', '拖曳移動', () => {}); g.classList.add('grip'); g.draggable = true;
-    g.ondragstart = e => { e.dataTransfer.setData('text/plain', node.id); e.dataTransfer.effectAllowed = 'move'; row.classList.add('dragging'); };
-    g.ondragend = () => row.classList.remove('dragging');
-    acts.appendChild(g);
+  if(!isRoot){
+    const del = iBtn("✕","刪除", ()=>{
+      if(!confirm(`刪除「${n.title}」?`)) return;
+      const p = findParent(state.tree, n.id).parent;
+      p.children = p.children.filter(c=>c.id!==n.id);
+      render(); markDirty();
+    });
+    del.classList.add("del");
+    btns.appendChild(del);
   }
-  row.appendChild(acts);
+  row.appendChild(btns);
 
-  // drop target behaviour
-  row.ondragover = e => {
-    e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-    const r = row.getBoundingClientRect(); const y = (e.clientY - r.top) / r.height;
-    row.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-into');
-    if (node.id === 'root') { row.classList.add('drag-over-into'); return; }
-    if (y < 0.3) row.classList.add('drag-over-top');
-    else if (y > 0.7) row.classList.add('drag-over-bottom');
-    else row.classList.add(node.type === 'folder' ? 'drag-over-into' : 'drag-over-bottom');
-  };
-  row.ondragleave = () => row.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-into');
-  row.ondrop = e => {
-    e.preventDefault();
-    const mode = row.classList.contains('drag-over-top') ? 'before' : row.classList.contains('drag-over-into') ? 'into' : 'after';
-    row.classList.remove('drag-over-top', 'drag-over-bottom', 'drag-over-into');
-    const srcId = e.dataTransfer.getData('text/plain');
-    if (!srcId || srcId === node.id) return;
-    const src = locate(srcId); if (!src) return;
-    if (isDescendant(src.node, node.id)) return; // 不可放進自己的子孫
-    src.parent.children = src.parent.children.filter(c => c.id !== srcId);
-    if (mode === 'into') { node.children.push(src.node); node.collapsed = false; }
-    else {
-      const loc = locate(node.id); const arr = loc.parent.children;
-      const i = arr.findIndex(c => c.id === node.id);
-      arr.splice(mode === 'before' ? i : i + 1, 0, src.node);
+  /* drop target */
+  row.addEventListener("dragover", e=>{ e.preventDefault(); row.classList.add("dragover"); });
+  row.addEventListener("dragleave", ()=>row.classList.remove("dragover"));
+  row.addEventListener("drop", e=>{
+    e.preventDefault(); row.classList.remove("dragover");
+    const srcId = e.dataTransfer.getData("text/id");
+    if(!srcId || srcId===n.id) return;
+    const src = findParent(state.tree, srcId);
+    if(!src) return;
+    if(isDescendant(src.node, n.id)) return;                 // no dropping into own descendant
+    src.parent.children = src.parent.children.filter(c=>c.id!==srcId);
+    if(n.type==="folder"){ n.children.push(src.node); n.collapsed=false; }   // into folder
+    else{                                                     // after card, same parent
+      const tp = findParent(state.tree, n.id).parent;
+      tp.children.splice(tp.children.indexOf(n)+1, 0, src.node);
     }
-    render(); scheduleSync();
-  };
+    render(); markDirty();
+  });
 
   wrap.appendChild(row);
 
-  // body
-  if (node.type === 'card' && !node.collapsed) {
-    const bodyWrap = document.createElement('div'); bodyWrap.className = 'cardbody';
-    const card = document.createElement('div'); card.className = 'card';
-    const tb = document.createElement('div'); tb.className = 'toolbar' + (node.showToolbar ? '' : ' hide');
-    const cmd = (label, tip, c, arg) => { const b = document.createElement('button'); b.className = 'tb'; b.title = tip; b.innerHTML = label;
-      b.onmousedown = e => e.preventDefault(); b.onclick = () => { document.execCommand(c, false, arg || null); rt.focus(); node.content = rt.innerHTML; scheduleSync(); }; return b; };
-    tb.appendChild(cmd('<b>B</b>', '粗體', 'bold'));
-    tb.appendChild(cmd('<i>I</i>', '斜體', 'italic'));
-    tb.appendChild(cmd('<u>U</u>', '底線', 'underline'));
-    tb.appendChild(cmd('•≡', '項目符號', 'insertUnorderedList'));
-    tb.appendChild(cmd('⇤', '減少縮排', 'outdent'));
-    tb.appendChild(cmd('⇥', '增加縮排', 'indent'));
-    tb.appendChild(cmd('✕fmt', '清除格式', 'removeFormat'));
-    card.appendChild(tb);
-    const rt = document.createElement('div');
-    rt.className = 'rt'; rt.contentEditable = 'true'; rt.spellcheck = false; rt.innerHTML = node.content || '';
-    rt.oninput = () => { node.content = rt.innerHTML; scheduleSync(); };
-    card.appendChild(rt);
-    bodyWrap.appendChild(card);
-    wrap.appendChild(bodyWrap);
+  /* card body */
+  if(n.type==="card" && !n.collapsed){
+    const body = document.createElement("div");
+    body.className = "cardbody";
+    const box = document.createElement("div");
+    box.className = "cardbox";
+    box.appendChild(rtToolbar());
+    const rt = document.createElement("div");
+    rt.className = "rt"; rt.contentEditable = "true"; rt.spellcheck = false;
+    rt.innerHTML = n.html || "";
+    rt.addEventListener("input", ()=>{ n.html = rt.innerHTML; markDirty(); });
+    box.appendChild(rt);
+    body.appendChild(box);
+    wrap.appendChild(body);
   }
-  if (node.type === 'folder' && !node.collapsed && (node.children || []).length) {
-    const kids = document.createElement('div'); kids.className = 'kids';
-    node.children.forEach(c => kids.appendChild(renderNode(c, depth + 1)));
-    wrap.appendChild(kids);
+
+  /* folder children */
+  if(n.type==="folder" && !n.collapsed && n.children.length){
+    const ch = document.createElement("div");
+    ch.className = "children";
+    n.children.forEach(c=>ch.appendChild(renderNode(c)));
+    wrap.appendChild(ch);
   }
   return wrap;
 }
 
-/* ============ expand / collapse levels ============ */
-function expandLevels(n) { walk(tree, (nd, d) => { nd.collapsed = d >= n; }); tree.collapsed = false; render(); scheduleSync(); }
-document.getElementById('ex1').onclick = () => expandLevels(1);
-document.getElementById('ex2').onclick = () => expandLevels(2);
-document.getElementById('ex3').onclick = () => expandLevels(3);
-document.getElementById('exAll').onclick = () => { walk(tree, nd => nd.collapsed = false); render(); scheduleSync(); };
-document.getElementById('colAll').onclick = () => { walk(tree, (nd, d) => nd.collapsed = d > 0); render(); scheduleSync(); };
+function iBtn(txt,title,fn){
+  const b = document.createElement("button");
+  b.className = "ib"; b.textContent = txt; b.title = title;
+  b.onmousedown = e=>e.preventDefault();      // keep selection for rich text
+  b.onclick = fn;
+  return b;
+}
 
-/* ============ IndexedDB ============ */
-let idb;
-const idbReady = new Promise(res => {
-  const rq = indexedDB.open('article-tree', 1);
-  rq.onupgradeneeded = () => rq.result.createObjectStore('kv');
-  rq.onsuccess = () => { idb = rq.result; res(); };
-  rq.onerror = () => res();
-});
-function idbPut(val) { if (!idb) return; const tx = idb.transaction('kv', 'readwrite'); tx.objectStore('kv').put(val, 'tree'); }
-function idbGet() { return new Promise(res => { if (!idb) return res(null); const rq = idb.transaction('kv').objectStore('kv').get('tree'); rq.onsuccess = () => res(rq.result || null); rq.onerror = () => res(null); }); }
+function rtToolbar(){
+  const bar = document.createElement("div");
+  bar.className = "rtbar";
+  const cmd = (c,v)=>()=>document.execCommand(c,false,v);
+  [["B","粗體",cmd("bold")],["I","斜體",cmd("italic")],["U","底線",cmd("underline")],
+   ["•","項目符號",cmd("insertUnorderedList")],["⇥","增加縮排",cmd("indent")],["⇤","減少縮排",cmd("outdent")]
+  ].forEach(([t,tt,f])=>{ const b=iBtn(t,tt,f); if(t==="B")b.style.fontWeight="bold"; if(t==="I")b.style.fontStyle="italic"; bar.appendChild(b); });
+  [["o","#ff8c1a"],["t","#1fd6c9"],["b","#3d8bff"],["g","#3fbf6f"],["p","#b06ce8"],["r","#ef5350"]].forEach(([k,c])=>{
+    const b=document.createElement("button"); b.className="hl "+k; b.title="螢光標示";
+    b.onmousedown=e=>e.preventDefault();
+    b.onclick=()=>document.execCommand("hiliteColor",false,c);
+    bar.appendChild(b);
+  });
+  const clr=document.createElement("button"); clr.className="hl x"; clr.textContent="✕"; clr.title="清除格式";
+  clr.onmousedown=e=>e.preventDefault(); clr.onclick=()=>document.execCommand("removeFormat");
+  bar.appendChild(clr);
+  return bar;
+}
 
-/* ============ Supabase sync ============ */
-const TABLE = 'article_tree', ROW_ID = 'main';
-let sb = null, syncTimer = null, retryTimer = null;
-const dot = document.getElementById('dot'), dotLabel = document.getElementById('dotLabel');
-function setStatus(s) {
-  dot.className = s;
-  dotLabel.textContent = { ok: '已同步', sync: '同步中', err: '同步失敗', local: '本機' }[s] || '';
-}
-function initSb() {
-  const url = localStorage.getItem('sb_url'), key = localStorage.getItem('sb_key');
-  if (url && key && window.supabase) { try { sb = window.supabase.createClient(url, key); return true; } catch (e) { sb = null; } }
-  sb = null; return false;
-}
-function scheduleSync() {
-  idbPut(JSON.parse(JSON.stringify(tree)));           // 立即本機備援
-  if (!sb) { setStatus('local'); return; }
-  setStatus('sync');
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(pushCloud, 1500);             // 1.5s 防抖
-}
-async function pushCloud() {
-  if (!sb) return;
-  clearTimeout(retryTimer);
-  try {
-    const { error } = await sb.from(TABLE).upsert({ id: ROW_ID, data: tree, updated_at: new Date().toISOString() });
-    if (error) throw error;
-    setStatus('ok');
-  } catch (e) {
-    setStatus('err');
-    retryTimer = setTimeout(pushCloud, 5000);          // 每 5 秒自動重試
+/* ================= expand / collapse levels ================= */
+function walk(n, fn, depth=0){ fn(n,depth); (n.children||[]).forEach(c=>walk(c,fn,depth+1)); }
+function expandLevel(k){ walk(state.tree,(n,d)=>{ n.collapsed = d >= k; }); state.tree.collapsed=false; render(); markDirty(); }
+function collapseAll(){ walk(state.tree,(n,d)=>{ n.collapsed = d>0 || n.type==="card"; }); state.tree.collapsed = state.tree.children.length ? true : false; render(); markDirty(); }
+
+/* ================= exports ================= */
+async function saveFile(name, content, type, mime){
+  if(window.showSaveFilePicker){
+    try{
+      const h = await showSaveFilePicker({ suggestedName:name, types:[{description:type, accept:{[mime]:["."+name.split(".").pop()]}}] });
+      const w = await h.createWritable(); await w.write(content); await w.close();
+      return;
+    }catch(e){ if(e.name==="AbortError") return; }
   }
-}
-async function loadCloud() {
-  if (!sb) return null;
-  try {
-    const { data, error } = await sb.from(TABLE).select('data').eq('id', ROW_ID).maybeSingle();
-    if (error) throw error;
-    return data ? data.data : null;
-  } catch (e) { return null; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content],{type:mime}));
+  a.download = name; a.click(); URL.revokeObjectURL(a.href);
 }
 
-/* settings panel */
-const cfg = document.getElementById('cfg');
-document.getElementById('btnCfg').onclick = () => {
-  document.getElementById('cfgUrl').value = localStorage.getItem('sb_url') || '';
-  document.getElementById('cfgKey').value = localStorage.getItem('sb_key') || '';
-  cfg.classList.toggle('show');
-};
-document.getElementById('cfgSave').onclick = () => {
-  localStorage.setItem('sb_url', document.getElementById('cfgUrl').value.trim());
-  localStorage.setItem('sb_key', document.getElementById('cfgKey').value.trim());
-  cfg.classList.remove('show');
-  if (initSb()) { setStatus('sync'); pushCloud(); } else setStatus('local');
-};
-
-/* ============ HTML → Markdown ============ */
-function inlineMd(node) {
-  let out = '';
-  node.childNodes.forEach(n => {
-    if (n.nodeType === 3) { out += n.textContent; return; }
-    const t = (n.tagName || '').toLowerCase();
-    if (t === 'b' || t === 'strong') out += '**' + inlineMd(n) + '**';
-    else if (t === 'i' || t === 'em') out += '*' + inlineMd(n) + '*';
-    else if (t === 'br') out += '\n';
-    else out += inlineMd(n);
-  });
-  return out;
+function exportJSON(){
+  saveFile("article-tree.json", JSON.stringify(state,null,2), "JSON", "application/json");
 }
-function listMd(ul, depth) {
-  let out = '';
-  [...ul.children].forEach(li => {
-    let text = '', sub = '';
-    li.childNodes.forEach(c => {
-      if (c.nodeType === 1 && (c.tagName === 'UL' || c.tagName === 'OL')) sub += listMd(c, depth + 1);
-      else text += c.nodeType === 3 ? c.textContent : inlineMd(c);
-    });
-    if (text.trim() || sub) out += '  '.repeat(depth) + '- ' + text.trim() + '\n' + sub;
-  });
-  return out;
+
+function importJSON(){
+  const fi = document.getElementById("fileInput");
+  fi.onchange = async ()=>{
+    const f = fi.files[0]; if(!f) return;
+    try{
+      const obj = JSON.parse(await f.text());
+      if(!obj.tree || !obj.tree.type) throw 0;
+      state = obj; applySettings(); render(); markDirty();
+    }catch(e){ alert("不是有效的 Article Tree JSON 檔"); }
+    fi.value = "";
+  };
+  fi.click();
 }
-function blockMd(el, depth) {
-  let out = '';
-  el.childNodes.forEach(n => {
-    if (n.nodeType === 3) { if (n.textContent.trim()) out += n.textContent + '\n'; return; }
-    const t = n.tagName.toLowerCase();
-    if (t === 'ul' || t === 'ol') out += listMd(n, depth);
-    else if (t === 'div' || t === 'p') { const s = blockMd(n, depth); out += s || '\n'; }
-    else if (t === 'br') out += '\n';
-    else out += inlineMd(n) + '\n';
-  });
-  return out;
-}
-function htmlToMd(html) {
-  const tmp = document.createElement('div'); tmp.innerHTML = html || '';
-  return blockMd(tmp, 0).replace(/\n{3,}/g, '\n\n').trim();
-}
-function htmlToText(html) { return htmlToMd(html).replace(/\*\*/g, '').replace(/(^|\n)\*(.*?)\*/g, '$1$2'); }
 
-/* ============ exports ============ */
-async function saveFile(blob, name, types) {
-  if (window.showSaveFilePicker) {
-    try {
-      const h = await showSaveFilePicker({ suggestedName: name, types });
-      const w = await h.createWritable(); await w.write(blob); await w.close(); return;
-    } catch (e) { if (e.name === 'AbortError') return; }
-  }
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-}
-const stamp = () => new Date().toISOString().slice(0, 10);
-
-document.getElementById('btnExpJson').onclick = () =>
-  saveFile(new Blob([JSON.stringify(tree, null, 2)], { type: 'application/json' }), 'article-tree-' + stamp() + '.json',
-    [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]);
-
-document.getElementById('btnImpJson').onclick = () => document.getElementById('fileImp').click();
-document.getElementById('fileImp').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  try {
-    const obj = JSON.parse(await f.text());
-    if (!obj || obj.type !== 'folder' || !Array.isArray(obj.children)) throw 0;
-    tree = obj; render(); scheduleSync();
-  } catch (_) { alert('檔案格式無效:僅接受由本應用匯出的 JSON。'); }
-  e.target.value = '';
-};
-
-document.getElementById('btnExpTxt').onclick = () => {
-  let out = '';
-  walk(tree, (n, d) => {
-    const pad = '  '.repeat(d);
-    out += pad + (n.type === 'folder' ? '📁 ' : '') + (n.title || '未命名') + '\n';
-    if (n.type === 'card' && n.content) out += htmlToText(n.content).split('\n').map(l => pad + '  ' + l).join('\n') + '\n';
-  });
-  saveFile(new Blob([out], { type: 'text/plain;charset=utf-8' }), 'article-tree-' + stamp() + '.txt',
-    [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }]);
-};
-
-document.getElementById('btnExpMd').onclick = () => {
-  let out = '';
-  walk(tree, (n, d) => {
-    if (n.type === 'folder') out += '#'.repeat(Math.min(d + 1, 6)) + ' ' + (n.title || '未命名') + '\n\n';
-    else { out += '**' + (n.title || '未命名') + '**\n\n'; const b = htmlToMd(n.content); if (b) out += b + '\n\n'; }
-  });
-  saveFile(new Blob([out], { type: 'text/markdown;charset=utf-8' }), 'article-tree-' + stamp() + '.md',
-    [{ description: 'Markdown', accept: { 'text/markdown': ['.md'] } }]);
-};
-
-const slug = s => (s || '未命名').replace(/[\\/:*?"<>|#%{}^~\[\]`]/g, '').trim().slice(0, 60) || '未命名';
-document.getElementById('btnExpOkf').onclick = async () => {
-  if (!window.JSZip) { alert('JSZip 未載入,請檢查網路。'); return; }
-  const zip = new JSZip();
-  const used = new Set();
-  const uniq = (base, ext) => { let n = base, i = 1; while (used.has(n + ext)) n = base + '-' + (++i); used.add(n + ext); return n + ext; };
-  (function emit(node, path) {
-    (node.children || []).forEach(c => {
-      if (c.type === 'folder') emit(c, path + slug(c.title) + '/');
-      else {
-        const body = htmlToMd(c.content);
-        const desc = htmlToText(c.content).replace(/\n+/g, ' ').slice(0, 80);
-        const fm = ['---', 'type: article', 'title: "' + (c.title || '未命名').replace(/"/g, '\\"') + '"',
-          'description: "' + desc.replace(/"/g, '\\"') + '"', 'tags: []',
-          'timestamp: ' + new Date().toISOString(), '---', '', body, ''].join('\n');
-        zip.file(path + uniq(slug(c.title), '.md'), fm);
+/* HTML → Markdown converter (bold, italic, nested bullets) */
+function htmlToMd(html){
+  const doc = new DOMParser().parseFromString("<div>"+ (html||"") +"</div>","text/html");
+  function conv(node, indent){
+    let out = "";
+    node.childNodes.forEach(ch=>{
+      if(ch.nodeType===3){ out += ch.textContent; return; }
+      const tag = ch.tagName ? ch.tagName.toLowerCase() : "";
+      if(tag==="strong"||tag==="b") out += "**"+conv(ch,indent).trim()+"**";
+      else if(tag==="em"||tag==="i") out += "*"+conv(ch,indent).trim()+"*";
+      else if(tag==="u") out += conv(ch,indent);
+      else if(tag==="br") out += "\n";
+      else if(tag==="ul"||tag==="ol"){
+        let i=1;
+        ch.childNodes.forEach(li=>{
+          if(li.tagName && li.tagName.toLowerCase()==="li"){
+            const marker = tag==="ol" ? (i++)+". " : "- ";
+            const sub = [...li.childNodes].filter(x=>x.tagName && ["UL","OL"].includes(x.tagName));
+            const own = [...li.childNodes].filter(x=>!sub.includes(x));
+            const tmp = document.createElement("div"); own.forEach(x=>tmp.appendChild(x.cloneNode(true)));
+            out += "\n" + "  ".repeat(indent) + marker + conv(tmp,indent).trim();
+            sub.forEach(s=>{ const w=document.createElement("div"); w.appendChild(s.cloneNode(true)); out += conv(w,indent+1); });
+          }
+        });
+        out += "\n";
       }
+      else if(tag==="div"||tag==="p") out += "\n" + conv(ch,indent);
+      else out += conv(ch,indent);
     });
-  })(tree, slug(tree.title) + '/');
-  const blob = await zip.generateAsync({ type: 'blob' });
-  saveFile(blob, 'okf-bundle-' + stamp() + '.zip', [{ description: 'Zip', accept: { 'application/zip': ['.zip'] } }]);
-};
+    return out;
+  }
+  return conv(doc.body.firstChild,0).replace(/\n{3,}/g,"\n\n").trim();
+}
 
-document.getElementById('btnReset').onclick = () => {
-  if (!confirm('確定清除所有內容並重新開始?此動作會覆蓋雲端資料。')) return;
-  tree = freshTree(); render(); scheduleSync();
-};
+function treeToMd(n, level=1){
+  let out = "";
+  if(n.type==="folder"){
+    out += "#".repeat(Math.min(level,6)) + " " + n.title + "\n\n";
+    n.children.forEach(c=>out += treeToMd(c, level+1));
+  }else{
+    out += "**" + n.title + "**\n\n" + htmlToMd(n.html) + "\n\n";
+  }
+  return out;
+}
+function exportMD(){ saveFile("article-tree.md", treeToMd(state.tree), "Markdown", "text/markdown"); }
 
-/* ============ styling controls ============ */
-const rootStyle = document.documentElement.style;
-document.getElementById('selFont').onchange = e => rootStyle.setProperty('--font', e.target.value);
-document.getElementById('selSize').onchange = e => rootStyle.setProperty('--fs', e.target.value + 'px');
-document.getElementById('selIndent').onchange = e => rootStyle.setProperty('--indent', e.target.value + 'px');
-document.getElementById('inBorder').oninput = e => rootStyle.setProperty('--line', e.target.value);
+function treeToText(n, depth=0){
+  const pad = "  ".repeat(depth);
+  let out = pad + (n.type==="folder"?"📁 ":"") + n.title + "\n";
+  if(n.type==="card"){
+    const body = htmlToMd(n.html).replace(/\*\*/g,"").replace(/(^|\n)\*/g,"$1");
+    if(body) out += body.split("\n").map(l=>pad+"  "+l).join("\n") + "\n";
+  }
+  (n.children||[]).forEach(c=>out += treeToText(c,depth+1));
+  return out;
+}
+function exportText(){ saveFile("article-tree.txt", treeToText(state.tree), "Text", "text/plain"); }
 
-/* ============ controls toggle ============ */
-const footer = document.getElementById('controls'), ctlToggle = document.getElementById('ctlToggle');
-ctlToggle.onclick = () => {
-  footer.classList.toggle('hide');
-  ctlToggle.textContent = footer.classList.contains('hide') ? '⌃ 控制列' : '⌄ 控制列';
-};
+function exportHTML(){
+  const s = state.settings;
+  function nodeHtml(n){
+    if(n.type==="folder")
+      return `<details open><summary><b>${esc(n.title)}</b></summary><div class="ch">${n.children.map(nodeHtml).join("")}</div></details>`;
+    return `<details open class="card"><summary><b>${esc(n.title)}</b></summary><div class="body">${n.html||""}</div></details>`;
+  }
+  const esc = t => t.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+  const html = `<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>${esc(state.tree.title)}</title><style>
+body{background:#12100b;color:#e9e2cf;font-family:${s.font};font-size:${s.size}px;line-height:1.3;padding:16px}
+summary{cursor:pointer;color:${s.border}}
+.card summary{color:#e9e2cf}
+.ch,.body{margin-left:${s.indent}px;border-left:1px solid ${s.border}44;padding-left:8px}
+.card .body{background:#1a1712;border:1px solid ${s.border}55;border-radius:7px;padding:6px 9px;margin-top:3px;max-width:720px}
+ul,ol{padding-left:${s.indent}px;margin:2px 0}
+</style></head><body>${nodeHtml(state.tree)}</body></html>`;
+  saveFile("article-tree.html", html, "HTML", "text/html");
+}
 
-/* ============ init ============ */
-(async function init() {
-  await idbReady;
-  initSb();
-  let loaded = null, from = '';
-  if (sb) { loaded = await loadCloud(); if (loaded) from = 'cloud'; }
-  if (!loaded) { loaded = await idbGet(); if (loaded) from = 'idb'; }
-  if (loaded) tree = loaded;
-  render();
-  if (from === 'cloud') setStatus('ok');
-  else if (sb) { setStatus('sync'); pushCloud(); }
-  else setStatus('local');
+/* OKF bundle: zip mirroring folder hierarchy, one .md per card with YAML frontmatter */
+async function exportOKF(){
+  if(typeof JSZip === "undefined"){ alert("JSZip 未載入,請確認網路連線後重新整理"); return; }
+  const zip = new JSZip();
+  const safe = t => (t||"untitled").replace(/[\\/:*?"<>|]/g,"_").trim() || "untitled";
+  function put(n, dir){
+    if(n.type==="folder"){
+      const d = dir.folder(safe(n.title));
+      n.children.forEach(c=>put(c,d));
+    }else{
+      const body = htmlToMd(n.html);
+      const fm = ["---","type: article",`title: "${(n.title||"").replace(/"/g,'\\"')}"`,'description: ""',"tags: []",`timestamp: ${new Date().toISOString()}`,"---",""].join("\n");
+      dir.file(safe(n.title)+".md", fm + "\n" + body + "\n");
+    }
+  }
+  put(state.tree, zip);
+  const blob = await zip.generateAsync({type:"blob"});
+  saveFile("article-tree-okf.zip", blob, "OKF Bundle", "application/zip");
+}
+
+function resetAll(){
+  if(!confirm("清除全部內容並重新開始?此動作會同步到雲端。")) return;
+  state = freshState(); applySettings(); render(); markDirty();
+}
+
+/* ================= panel toggle ================= */
+document.getElementById("panelToggle").onclick = ()=>document.getElementById("panel").classList.toggle("hidden");
+
+/* ================= init: cloud → local → fresh ================= */
+(async function init(){
+  setDot("syncing","載入中");
+  let loaded = null;
+  try{ loaded = await pullCloud(); }catch(e){}
+  if(!loaded) loaded = await idbLoad();
+  if(loaded && loaded.tree) state = loaded;
+  applySettings(); render();
+  setDot(loaded ? "ok" : "", loaded ? "已同步" : "全新檔案");
+  window.addEventListener("beforeunload", ()=>{ if(dirty) idbSave(); });
 })();
 </script>
 </body>
