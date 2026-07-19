@@ -1,580 +1,666 @@
 <!DOCTYPE html>
-<html lang="en">
-<head> 
+<html lang="zh-Hant">
+<head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SmartNotes</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{
-  --font:"PingFang TC","Microsoft JhengHei",sans-serif;
+  --bg:#0d0e10;
+  --bg2:#141519;
+  --gold:#d4a94a;
+  --gold-dim:#8a6f2f;
+  --line:#d4a94a;
+  --text:#e8e4d8;
+  --muted:#8b8778;
+  --indent:20px;
+  --cardw:640px;
   --fs:12px;
-  --indent:18px;
-  --bg:#14110b;
-  --gold:#d4af37;
-  --gold-dim:#8a7326;
-  --line:#3a3220;
-  --card-border:#d4af37;
-  --text:#e8e2d0;
-  --muted:#9a8f6f;
+  --font:"PingFang TC","Noto Sans TC",sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:var(--fs);line-height:1.35}
-body{min-height:100vh;display:flex;flex-direction:column}
+body{padding:10px 14px 120px 14px;min-height:100vh}
 
-/* header */
-header{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line)}
-header h1{font-size:14px;font-weight:700;color:var(--gold);letter-spacing:.5px}
-header .spacer{flex:1}
-#statusDot{width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 5px var(--gold);transition:background .3s}
-#statusDot.ok{background:#4caf50;box-shadow:0 0 5px #4caf50}
-#statusDot.err{background:#e05252;box-shadow:0 0 5px #e05252}
-#toggleCtrl{background:none;border:1px solid var(--line);border-radius:4px;color:var(--gold);cursor:pointer;font-size:11px;padding:1px 6px}
-#toggleCtrl:hover{border-color:var(--gold)}
+/* ---------- header ---------- */
+#hdr{display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--gold-dim);padding-bottom:5px;margin-bottom:8px}
+#appTitle{font-size:calc(var(--fs) + 6px);font-weight:600;color:var(--gold);outline:none;letter-spacing:.5px;min-width:60px}
+#appTitle:focus{border-bottom:1px dotted var(--gold)}
+#statusDot{margin-left:auto;width:9px;height:9px;border-radius:50%;background:#3a3a3a;flex:0 0 auto;transition:background .3s, box-shadow .3s}
+#statusDot.sync{background:var(--gold);box-shadow:0 0 6px var(--gold)}
+#statusDot.ok{background:#4caf6e;box-shadow:0 0 5px #4caf6e66}
+#statusDot.err{background:#e05252;box-shadow:0 0 6px #e05252}
+#statusMsg{font-size:calc(var(--fs) - 2px);color:var(--muted)}
 
-/* tree */
-main{flex:1;padding:8px 10px;overflow:auto}
-.row{display:flex;align-items:center;gap:4px;min-height:20px;border-radius:3px;padding-right:4px}
-.row.dragover{outline:1px dashed var(--gold)}
-.bullet{width:16px;height:16px;flex:0 0 16px;border:none;background:none;cursor:pointer;position:relative;padding:0}
-.bullet::before{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:var(--gold)}
-.bullet.halo::after{content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:rgba(212,175,55,.22)}
-.bullet.leaf::before{background:var(--gold-dim)}
-.title{font-weight:700;outline:none;cursor:text;padding:0 2px;border-radius:2px;white-space:pre-wrap}
-.title:focus{background:rgba(212,175,55,.08)}
-.actions{display:none;align-items:center;gap:2px;margin-left:2px}
-.row:hover .actions{display:inline-flex}
-.actions button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;line-height:1;padding:1px 3px;border-radius:3px}
-.actions button:hover{color:var(--gold);background:rgba(212,175,55,.1)}
-.grip{cursor:grab}
+/* ---------- tree ---------- */
+#tree{max-width:var(--cardw)}
+.node{position:relative}
+.node .children{margin-left:var(--indent);border-left:1px solid color-mix(in srgb, var(--line) 30%, transparent);padding-left:6px}
+.row{display:flex;align-items:center;gap:5px;padding:1px 2px;border-radius:4px;min-height:20px}
+.row:hover{background:var(--bg2)}
+.row.dragover-in{outline:1px solid var(--gold)}
+.row.dragover-before{box-shadow:0 -2px 0 var(--gold)}
+.row.dragover-after{box-shadow:0 2px 0 var(--gold)}
+
+/* halo toggle bullet */
+.blt{flex:0 0 14px;width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative}
+.blt::after{content:"";width:5px;height:5px;border-radius:50%;background:var(--gold)}
+.blt.has.closed{background:radial-gradient(circle, color-mix(in srgb,var(--gold) 35%, transparent) 0%, transparent 70%);box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 45%, transparent) inset}
+.blt.leaf::after{background:var(--gold-dim);width:4px;height:4px}
+.blt:hover::after{box-shadow:0 0 5px var(--gold)}
+
+.ntitle{outline:none;cursor:text;padding:0 2px;white-space:pre-wrap;word-break:break-word}
+.node[data-type="folder"] > .row .ntitle{color:var(--gold);font-weight:600}
+.node[data-type="article"] > .row .ntitle{font-weight:500}
+
+/* hover-reveal edit buttons on same line */
+.ebtns{display:flex;gap:2px;margin-left:2px;opacity:0;transition:opacity .12s;flex:0 0 auto}
+.row:hover .ebtns, .ebtns:focus-within{opacity:1}
+.ibtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:calc(var(--fs) - 1px);width:17px;height:17px;line-height:1;border-radius:3px;display:flex;align-items:center;justify-content:center;padding:0;font-family:var(--font)}
+.ibtn:hover{color:var(--gold);background:#1c1d22}
+.ibtn svg{width:12px;height:12px;fill:currentColor}
+.drag{cursor:grab}
 
 /* article card */
-.card{border:1px solid var(--card-border);border-radius:6px;padding:5px 8px;margin:2px 0 4px 0}
-.card .toolbar{display:none;gap:2px;margin-bottom:3px;border-bottom:1px solid var(--line);padding-bottom:3px}
-.card .toolbar.show{display:flex}
-.card .toolbar button{background:none;border:1px solid var(--line);border-radius:3px;color:var(--text);cursor:pointer;font-size:11px;padding:0 5px;height:18px}
-.card .toolbar button:hover{border-color:var(--gold);color:var(--gold)}
-.content{outline:none;min-height:16px}
-.content ul{padding-left:var(--indent);list-style:disc}
-.content ul ul{list-style:circle}
-.content li{margin:0}
+.card{margin:2px 0 4px 20px;max-width:calc(var(--cardw) - 40px);border:1px solid color-mix(in srgb,var(--line) 55%, transparent);border-radius:7px;background:var(--bg2);padding:5px 8px 6px}
+.rt{outline:none;min-height:16px}
+.rt ul{padding-left:var(--indent);margin:0}
+.rt li{margin:0}
+.rt li::marker{color:var(--gold)}
+.fmt{display:flex;gap:2px;margin-bottom:3px;opacity:0;height:0;overflow:hidden;transition:opacity .15s}
+.card:hover .fmt, .card:focus-within .fmt, .fmt.pin{opacity:1;height:auto;border-bottom:1px solid color-mix(in srgb,var(--line) 25%, transparent);padding-bottom:3px;margin-bottom:4px}
+.fmt .ibtn{font-weight:600}
 
-/* palette */
-#palette{position:absolute;display:none;background:#1c1810;border:1px solid var(--gold);border-radius:5px;padding:6px;z-index:50}
-#palette .prow{display:flex;gap:4px;margin-bottom:4px}
-#palette .prow:last-child{margin-bottom:0}
-#palette .sw{width:16px;height:16px;border-radius:3px;cursor:pointer;border:1px solid rgba(255,255,255,.15)}
-#palette .sw:hover{outline:1px solid #fff}
+/* ---------- 2D colour palette ---------- */
+#palette{position:fixed;z-index:50;background:#191a1f;border:1px solid var(--gold-dim);border-radius:6px;padding:5px;display:none;grid-template-columns:repeat(8,16px);gap:3px}
+#palette.show{display:grid}
+#palette div{width:16px;height:16px;border-radius:3px;cursor:pointer;border:1px solid #0006}
+#palette div:hover{outline:1px solid #fff}
 
-/* controls */
-footer{border-top:1px solid var(--line);padding:6px 10px;display:flex;flex-direction:column;gap:5px}
-footer.hidden{display:none}
-.ctrlrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.ctrlrow .lbl{color:var(--muted)}
-footer button,footer select{background:#1c1810;border:1px solid var(--line);border-radius:4px;color:var(--text);font-family:var(--font);font-size:11px;padding:2px 8px;cursor:pointer}
-footer button:hover{border-color:var(--gold);color:var(--gold)}
-footer select:focus{outline:none;border-color:var(--gold)}
-.iconbtn{font-size:11px;min-width:30px}
+/* ---------- control panel ---------- */
+#ctlToggle{position:fixed;right:12px;bottom:12px;z-index:40;background:var(--bg2);border:1px solid var(--gold-dim);color:var(--gold);border-radius:14px;padding:3px 11px;cursor:pointer;font-family:var(--font);font-size:var(--fs)}
+#ctl{position:fixed;left:0;right:0;bottom:0;background:#101116f2;border-top:1px solid var(--gold-dim);padding:6px 12px 8px;z-index:30;backdrop-filter:blur(4px)}
+#ctl.hide{display:none}
+.crow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:2px 0}
+.crow + .crow{border-top:1px dotted color-mix(in srgb,var(--gold-dim) 45%, transparent)}
+.cbtn{background:none;border:1px solid var(--gold-dim);color:var(--text);border-radius:5px;padding:2px 8px;cursor:pointer;font-family:var(--font);font-size:var(--fs);display:flex;align-items:center;gap:4px}
+.cbtn:hover{border-color:var(--gold);color:var(--gold)}
+.cbtn svg{width:12px;height:12px;fill:currentColor}
+select.cbtn{appearance:none;background:var(--bg2)}
+.clabel{color:var(--muted);font-size:calc(var(--fs) - 1px)}
+
+/* ---------- modal ---------- */
+#modalBg{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:60}
+#modalBg.show{display:flex}
+#modal{background:var(--bg2);border:1px solid var(--gold-dim);border-radius:8px;min-width:280px;max-width:70vw;max-height:70vh;overflow:auto;padding:10px 14px}
+#modal h3{color:var(--gold);font-size:calc(var(--fs)+1px);margin-bottom:6px;font-weight:600}
+.fitem{padding:4px 6px;border-radius:4px;cursor:pointer;display:flex;gap:10px;justify-content:space-between}
+.fitem:hover{background:#1c1d22;color:var(--gold)}
+.fitem small{color:var(--muted)}
+#modal .cbtn{margin-top:8px}
+::selection{background:color-mix(in srgb,var(--gold) 35%, transparent)}
 </style>
 </head>
 <body>
-<header>
-  <h1>SmartNotes</h1>
-  <div class="spacer"></div>
-  <div id="statusDot" title="同步狀態"></div>
-  <button id="toggleCtrl" title="顯示/隱藏控制列">⚙</button>
-</header>
 
-<main id="tree"></main>
+<div id="hdr">
+  <div id="appTitle" contenteditable="true" spellcheck="false">SmartNotes</div>
+  <span id="statusMsg"></span>
+  <div id="statusDot" title="sync status"></div>
+</div>
 
-<footer id="controls">
-  <div class="ctrlrow">
-    <button id="btnExportJson">匯出 JSON</button>
-    <button id="btnImportJson">匯入 JSON</button>
-    <button id="btnExportMd">匯出 Markdown</button>
-    <button id="btnExportHtml">匯出 HTML</button>
-    <button id="btnExportOkf">匯出 OKF 套件</button>
-    <button id="btnReset">重設</button>
-  </div>
-  <div class="ctrlrow">
-    <span class="lbl">字型</span>
-    <select id="selFont">
-      <option value='"PingFang TC","Microsoft JhengHei",sans-serif'>PingFang TC</option>
-      <option value='"Songti TC","Noto Serif TC",serif'>宋體</option>
-      <option value='"Kaiti TC","BiauKai",serif'>楷體</option>
-      <option value='Helvetica,Arial,sans-serif'>Helvetica</option>
-      <option value='Georgia,serif'>Georgia</option>
-      <option value='Menlo,Consolas,monospace'>等寬</option>
-    </select>
-    <span class="lbl">字號</span>
-    <select id="selSize">
-      <option>10</option><option>11</option><option selected>12</option>
-      <option>13</option><option>14</option><option>16</option><option>18</option>
-    </select>
-    <span class="lbl">縮排距離</span>
-    <select id="selIndent">
-      <option>12</option><option>15</option><option selected>18</option>
-      <option>22</option><option>26</option><option>32</option>
-    </select>
-    <span class="lbl">邊框顏色</span>
-    <button id="btnBorderColor">▦</button>
-  </div>
-  <div class="ctrlrow">
-    <span class="lbl">展開</span>
-    <button class="iconbtn" data-depth="1" title="展開一層">▸1</button>
-    <button class="iconbtn" data-depth="2" title="展開兩層">▸2</button>
-    <button class="iconbtn" data-depth="3" title="展開三層">▸3</button>
-    <button class="iconbtn" data-depth="99" title="全部展開">▸▸</button>
-    <button class="iconbtn" data-depth="0" title="全部收合">▾✕</button>
-  </div>
-</footer>
+<div id="tree"></div>
 
-<input type="file" id="fileInput" accept="application/json" style="display:none">
 <div id="palette"></div>
 
+<button id="ctlToggle">⚙ 控制列</button>
+<div id="ctl">
+  <div class="crow" id="row1">
+    <button class="cbtn" id="btnExportJson"><svg viewBox="0 0 16 16"><path d="M8 1v8m0 0L5 6m3 3 3-3M2 12v2h12v-2"/></svg>匯出 JSON</button>
+    <button class="cbtn" id="btnImportJson"><svg viewBox="0 0 16 16"><path d="M8 9V1m0 0L5 4m3-3 3 3M2 12v2h12v-2"/></svg>匯入 JSON</button>
+    <button class="cbtn" id="btnExportMd">匯出文字 (Markdown)</button>
+    <button class="cbtn" id="btnExportHtml">匯出 HTML</button>
+    <button class="cbtn" id="btnExportOkf">匯出 OKF 套件</button>
+    <button class="cbtn" id="btnFiles">☁ 雲端檔案</button>
+    <button class="cbtn" id="btnReset">✕ 重設</button>
+  </div>
+  <div class="crow" id="row2">
+    <span class="clabel">字體</span>
+    <select class="cbtn" id="selFont">
+      <option value='"PingFang TC","Noto Sans TC",sans-serif' selected>PingFang TC</option>
+      <option value='"Noto Sans TC",sans-serif'>Noto Sans TC</option>
+      <option value='"Songti TC",serif'>Songti TC</option>
+      <option value='"Kaiti TC",serif'>Kaiti TC</option>
+      <option value='"Helvetica Neue",Helvetica,sans-serif'>Helvetica Neue</option>
+      <option value='Georgia,serif'>Georgia</option>
+      <option value='Menlo,monospace'>Menlo</option>
+    </select>
+    <span class="clabel">字級</span>
+    <select class="cbtn" id="selSize">
+      <option>10</option><option>11</option><option selected>12</option><option>13</option>
+      <option>14</option><option>16</option><option>18</option>
+    </select>
+    <span class="clabel">縮排</span>
+    <select class="cbtn" id="selIndent">
+      <option>12</option><option>16</option><option selected>20</option><option>24</option><option>28</option>
+    </select>
+    <button class="cbtn" id="btnBorderColor">框線色 ◩</button>
+    <span class="clabel">卡片寬度</span>
+    <select class="cbtn" id="selWidth">
+      <option>480</option><option selected>640</option><option>760</option><option>900</option><option value="9999">全寬</option>
+    </select>
+  </div>
+  <div class="crow" id="row3">
+    <span class="clabel">展開</span>
+    <button class="cbtn" data-exp="1" title="展開一層">①</button>
+    <button class="cbtn" data-exp="2" title="展開兩層">②</button>
+    <button class="cbtn" data-exp="3" title="展開三層">③</button>
+    <button class="cbtn" data-exp="99" title="全部展開">⊞</button>
+    <button class="cbtn" data-exp="0" title="全部收合">⊟</button>
+  </div>
+</div>
+
+<div id="modalBg"><div id="modal"></div></div>
+<input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+
 <script>
-/* ================= Supabase config ================= */
+/* ================= Supabase config =================
+   需要一次性建表 (SQL editor):
+   create table if not exists smartnotes (
+     id text primary key,
+     data jsonb,
+     updated_at timestamptz default now()
+   );
+   alter table smartnotes enable row level security;
+   create policy "anon all" on smartnotes for all using (true) with check (true);
+==================================================== */
 const SB_URL = "https://bxeraximugvvpkpaejdn.supabase.co";
 const SB_KEY = "sb_publishable_i8jvS_ivsLBzYwb2HAKk1Q_d4DtCHjX";
 const SB_TABLE = "smartnotes";
-const DOC_ID = "main";
+const sbH = { "apikey": SB_KEY, "Authorization": "Bearer " + SB_KEY, "Content-Type": "application/json" };
 
-/* ================= State ================= */
-const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
-function freshDoc(){
-  return {
-    version: 1,
-    settings: { font: document.getElementById('selFont').value, size: "12", indent: "18", border: "#d4af37" },
-    tree: { id: uid(), type: "folder", title: "TITLE", collapsed: false, children: [] }
-  };
+/* ================= state ================= */
+const uid = () => Math.random().toString(36).slice(2, 10);
+const defaultState = () => ({
+  appTitle: "SmartNotes",
+  settings: { font: '"PingFang TC","Noto Sans TC",sans-serif', size: 12, indent: 20, border: "#d4a94a", width: 640 },
+  tree: { id: uid(), type: "folder", title: "TITLE", expanded: true, children: [] }
+});
+let state = defaultState();
+let fileId = localStorage.getItem("sn_fileId") || "SmartNotes";
+
+/* ================= IndexedDB ================= */
+const idb = {
+  db: null,
+  open() { return new Promise(res => {
+    const q = indexedDB.open("smartnotes", 1);
+    q.onupgradeneeded = e => e.target.result.createObjectStore("kv");
+    q.onsuccess = e => { idb.db = e.target.result; res(); };
+    q.onerror = () => res();
+  });},
+  set(k, v) { try { const t = idb.db.transaction("kv", "readwrite"); t.objectStore("kv").put(v, k); } catch(e){} },
+  get(k) { return new Promise(res => {
+    try { const q = idb.db.transaction("kv").objectStore("kv").get(k);
+      q.onsuccess = () => res(q.result); q.onerror = () => res(null);
+    } catch(e){ res(null); }
+  });}
+};
+
+/* ================= sync ================= */
+const dot = document.getElementById("statusDot");
+const msg = document.getElementById("statusMsg");
+let syncTimer = null, retryTimer = null;
+function setDot(cls, m) { dot.className = cls; msg.textContent = m || ""; }
+
+function changed() {                       // 每次編輯呼叫
+  idb.set("state:" + fileId, JSON.parse(JSON.stringify(state)));
+  idb.set("lastFileId", fileId);
+  clearTimeout(syncTimer);
+  setDot("sync", "");
+  syncTimer = setTimeout(push, 1500);      // debounce 1.5s
 }
-let doc = freshDoc();
+async function push() {
+  clearTimeout(retryTimer);
+  setDot("sync", "");
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?on_conflict=id`, {
+      method: "POST",
+      headers: { ...sbH, "Prefer": "resolution=merge-duplicates" },
+      body: JSON.stringify([{ id: fileId, data: state, updated_at: new Date().toISOString() }])
+    });
+    if (!r.ok) throw new Error(await r.text());
+    setDot("ok", "");
+  } catch (e) {
+    setDot("err", "同步失敗,5 秒後重試");
+    retryTimer = setTimeout(push, 5000);   // auto retry
+  }
+}
 
-/* ================= Tree helpers ================= */
-function findNode(id, node = doc.tree, parent = null){
-  if(node.id === id) return { node, parent };
-  for(const c of (node.children || [])){
-    const r = findNode(id, c, node);
-    if(r) return r;
+/* ================= load ================= */
+async function loadInitial() {
+  await idb.open();
+  fileId = (await idb.get("lastFileId")) || localStorage.getItem("sn_fileId") || "SmartNotes";
+  // 1) Supabase
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=eq.${encodeURIComponent(fileId)}&select=data`, { headers: sbH });
+    if (r.ok) {
+      const rows = await r.json();
+      if (rows.length && rows[0].data) { state = rows[0].data; setDot("ok"); renderAll(); return; }
+    }
+  } catch (e) {}
+  // 2) IndexedDB
+  const local = await idb.get("state:" + fileId);
+  if (local) { state = local; setDot("err", "離線模式 (本機資料)"); renderAll(); return; }
+  // 3) fresh
+  state = defaultState(); renderAll();
+}
+
+/* ================= tree helpers ================= */
+function findParent(root, id, parent = null) {
+  if (root.id === id) return { node: root, parent };
+  if (root.children) for (const c of root.children) {
+    const f = findParent(c, id, root); if (f) return f;
   }
   return null;
 }
-function isDescendant(ancestorId, id){
-  const a = findNode(ancestorId); if(!a) return false;
-  return !!findNode(id, a.node) && ancestorId !== id;
+const findNode = id => findParent(state.tree, id)?.node;
+function isDescendant(anc, id) {
+  if (anc.id === id) return true;
+  return (anc.children || []).some(c => isDescendant(c, id));
 }
 
-/* ================= Render ================= */
-const treeEl = document.getElementById('tree');
-function render(){
+/* ================= render ================= */
+const treeEl = document.getElementById("tree");
+const ICONS = {
+  folder: '<svg viewBox="0 0 16 16"><path d="M1.5 3.5h4l1.5 2h7.5v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/></svg>',
+  article:'<svg viewBox="0 0 16 16"><path d="M3 1.5h7l3 3v10h-10v-13zM5 6h6M5 8.5h6M5 11h4" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>',
+  trash:  '<svg viewBox="0 0 16 16"><path d="M2.5 4h11M5.5 4V2.5h5V4M4 4l.7 10h6.6L12 4" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>',
+  drag:   '<svg viewBox="0 0 16 16"><circle cx="5" cy="3.5" r="1.2"/><circle cx="11" cy="3.5" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12.5" r="1.2"/><circle cx="11" cy="12.5" r="1.2"/></svg>',
+  color:  '<svg viewBox="0 0 16 16"><path d="M8 1.5 11 8a3.2 3.2 0 1 1-6 0z"/><path d="M3 14h10" stroke="currentColor" stroke-width="1.6"/></svg>'
+};
+
+function renderAll() {
+  document.getElementById("appTitle").textContent = state.appTitle;
+  applySettings();
   treeEl.innerHTML = "";
-  treeEl.appendChild(renderNode(doc.tree, 0, true));
+  treeEl.appendChild(renderNode(state.tree, 0));
+  syncUIControls();
 }
-function renderNode(node, depth, isRoot){
-  const wrap = document.createElement('div');
-  wrap.style.marginLeft = isRoot ? "0" : "var(--indent)";
 
-  const row = document.createElement('div');
+function renderNode(n, depth) {
+  const wrap = document.createElement("div");
+  wrap.className = "node"; wrap.dataset.id = n.id; wrap.dataset.type = n.type;
+
+  const row = document.createElement("div");
   row.className = "row";
-  row.dataset.id = node.id;
 
-  /* bullet */
-  const b = document.createElement('button');
-  b.className = "bullet";
-  const hasInner = node.type === "folder" ? (node.children||[]).length > 0 : true;
-  if(!hasInner) b.classList.add('leaf');
-  if(hasInner && node.collapsed) b.classList.add('halo');
-  b.title = node.collapsed ? "展開" : "收合";
-  b.onclick = () => { node.collapsed = !node.collapsed; markDirty(); render(); };
-  row.appendChild(b);
+  /* halo toggle bullet — expands with one click */
+  const blt = document.createElement("div");
+  const hasKids = n.type === "folder" ? true : true; // articles collapse body, folders collapse children
+  blt.className = "blt has " + (n.expanded ? "open" : "closed");
+  if (n.type === "folder" && (!n.children || !n.children.length)) blt.classList.add("leaf");
+  blt.title = n.expanded ? "收合" : "展開";
+  blt.onclick = () => { n.expanded = !n.expanded; changed(); renderAll(); };
+  row.appendChild(blt);
 
-  /* title */
-  const t = document.createElement('span');
-  t.className = "title";
-  t.contentEditable = "true";
-  t.spellcheck = false;
-  t.textContent = node.title;
-  if(node.color) t.style.color = node.color;
-  t.oninput = () => { node.title = t.textContent; markDirty(); };
-  t.onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); t.blur(); } };
+  /* title: click to edit inline */
+  const t = document.createElement("div");
+  t.className = "ntitle"; t.contentEditable = "true"; t.spellcheck = false;
+  t.textContent = n.title;
+  t.oninput = () => { n.title = t.textContent; changed(); };
+  t.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); t.blur(); } };
   row.appendChild(t);
 
-  /* actions */
-  const acts = document.createElement('span');
-  acts.className = "actions";
-  if(!isRoot){
-    const grip = mkBtn("⠿","拖曳移動","grip");
-    grip.draggable = true;
-    grip.ondragstart = e => { e.dataTransfer.setData("text/plain", node.id); e.dataTransfer.effectAllowed = "move"; };
-    acts.appendChild(grip);
+  /* hover-reveal edit buttons, same line */
+  const eb = document.createElement("div");
+  eb.className = "ebtns";
+  const mk = (html, title, fn) => {
+    const b = document.createElement("button");
+    b.className = "ibtn"; b.innerHTML = html; b.title = title; b.onclick = fn; return b;
+  };
+  if (n.type === "folder") {
+    eb.appendChild(mk(ICONS.folder, "新增資料夾", () => {
+      n.children.push({ id: uid(), type: "folder", title: "FOLDER", expanded: true, children: [] });
+      n.expanded = true; changed(); renderAll();
+    }));
+    eb.appendChild(mk(ICONS.article, "新增文章卡", () => {
+      n.children.push({ id: uid(), type: "article", title: "ARTICLE", expanded: true, html: "<ul><li></li></ul>" });
+      n.expanded = true; changed(); renderAll();
+    }));
   }
-  if(node.type === "folder"){
-    acts.appendChild(mkBtn("▣＋","新增資料夾",null,()=>{ node.children.push({id:uid(),type:"folder",title:"FOLDER",collapsed:false,children:[]}); node.collapsed=false; markDirty(); render(); }));
-    acts.appendChild(mkBtn("✎＋","新增文章卡",null,()=>{ node.children.push({id:uid(),type:"article",title:"ARTICLE",collapsed:false,content:"",children:[]}); node.collapsed=false; markDirty(); render(); }));
+  eb.appendChild(mk(ICONS.color, "文字顏色", ev => {
+    openPalette(ev.currentTarget, c => { t.style.color = c; n.titleColor = c; changed(); });
+  }));
+  if (n.id !== state.tree.id) {
+    eb.appendChild(mk(ICONS.trash, "刪除", () => {
+      if (!confirm(`刪除「${n.title}」?`)) return;
+      const p = findParent(state.tree, n.id).parent;
+      p.children = p.children.filter(c => c.id !== n.id);
+      changed(); renderAll();
+    }));
+    const dh = mk(ICONS.drag, "拖曳移動", () => {});
+    dh.classList.add("drag"); dh.draggable = true;
+    dh.ondragstart = e => { e.dataTransfer.setData("text/plain", n.id); e.dataTransfer.effectAllowed = "move"; };
+    eb.appendChild(dh);
   }
-  if(node.type === "article"){
-    acts.appendChild(mkBtn("Aa","顯示/隱藏格式列",null,()=>{ const tb = wrap.querySelector(".toolbar"); if(tb) tb.classList.toggle("show"); }));
-  }
-  acts.appendChild(mkBtn("◩","標題文字顏色",null,(e)=>openPalette(e.target, c=>{ node.color=c; markDirty(); render(); })));
-  if(!isRoot){
-    acts.appendChild(mkBtn("✕","刪除",null,()=>{ if(confirm("刪除「"+node.title+"」及其所有內容?")){ const p=findNode(node.id).parent; p.children=p.children.filter(c=>c.id!==node.id); markDirty(); render(); } }));
-  }
-  row.appendChild(acts);
+  row.appendChild(eb);
+  if (n.titleColor) t.style.color = n.titleColor;
 
-  /* drop target */
-  row.ondragover = e => { e.preventDefault(); row.classList.add("dragover"); };
-  row.ondragleave = () => row.classList.remove("dragover");
+  /* drag targets */
+  row.ondragover = e => {
+    e.preventDefault();
+    const r = row.getBoundingClientRect(), y = e.clientY - r.top;
+    row.classList.remove("dragover-in","dragover-before","dragover-after");
+    if (n.type === "folder" && y > r.height*0.3 && y < r.height*0.7) row.classList.add("dragover-in");
+    else if (y < r.height/2) row.classList.add("dragover-before");
+    else row.classList.add("dragover-after");
+  };
+  row.ondragleave = () => row.classList.remove("dragover-in","dragover-before","dragover-after");
   row.ondrop = e => {
-    e.preventDefault(); row.classList.remove("dragover");
-    const dragId = e.dataTransfer.getData("text/plain");
-    if(!dragId || dragId === node.id || isDescendant(dragId, node.id)) return;
-    const src = findNode(dragId); if(!src) return;
-    src.parent.children = src.parent.children.filter(c=>c.id!==dragId);
-    if(node.type === "folder"){ node.children.push(src.node); node.collapsed = false; }
-    else{ const p = findNode(node.id).parent; const i = p.children.findIndex(c=>c.id===node.id); p.children.splice(i+1,0,src.node); }
-    markDirty(); render();
+    e.preventDefault();
+    const mode = row.classList.contains("dragover-in") ? "in" : row.classList.contains("dragover-before") ? "before" : "after";
+    row.classList.remove("dragover-in","dragover-before","dragover-after");
+    const srcId = e.dataTransfer.getData("text/plain");
+    if (!srcId || srcId === n.id) return;
+    const src = findNode(srcId);
+    if (!src || isDescendant(src, n.id)) return;          // 不能移入自己的子孫
+    const sp = findParent(state.tree, srcId).parent;
+    sp.children = sp.children.filter(c => c.id !== srcId);
+    if (mode === "in") { n.children.push(src); n.expanded = true; }
+    else {
+      const tp = findParent(state.tree, n.id).parent || state.tree;
+      const idx = tp.children.findIndex(c => c.id === n.id);
+      tp.children.splice(mode === "before" ? idx : idx + 1, 0, src);
+    }
+    changed(); renderAll();
   };
 
   wrap.appendChild(row);
 
-  /* expanded body */
-  if(!node.collapsed){
-    if(node.type === "article"){
-      const card = document.createElement('div');
-      card.className = "card";
-      card.style.marginLeft = "16px";
-      const tb = document.createElement('div');
-      tb.className = "toolbar";
-      tb.appendChild(mkTb("B","粗體",()=>exec("bold")));
-      tb.appendChild(mkTb("I","斜體",()=>exec("italic")));
-      tb.appendChild(mkTb("•","項目符號",()=>exec("insertUnorderedList")));
-      tb.appendChild(mkTb("◩","文字顏色",(e)=>openPalette(e.target, c=>exec("foreColor",c))));
-      card.appendChild(tb);
-      const ct = document.createElement('div');
-      ct.className = "content";
-      ct.contentEditable = "true";
-      ct.spellcheck = false;
-      ct.innerHTML = node.content || "";
-      ct.oninput = () => { node.content = ct.innerHTML; markDirty(); };
-      ct.onfocus = () => tb.classList.add("show");
-      card.appendChild(ct);
-      wrap.appendChild(card);
+  /* body */
+  if (n.expanded) {
+    if (n.type === "folder") {
+      const kids = document.createElement("div");
+      kids.className = "children";
+      (n.children || []).forEach(c => kids.appendChild(renderNode(c, depth + 1)));
+      wrap.appendChild(kids);
+    } else {
+      wrap.appendChild(renderCard(n));
     }
-    for(const c of (node.children || [])) wrap.appendChild(renderNode(c, depth+1, false));
   }
   return wrap;
 }
-function mkBtn(txt, title, cls, fn){
-  const b = document.createElement('button');
-  b.textContent = txt; b.title = title;
-  if(cls) b.className = cls;
-  if(fn) b.onclick = fn;
-  return b;
-}
-function mkTb(txt, title, fn){
-  const b = document.createElement('button');
-  b.textContent = txt; b.title = title;
-  b.onmousedown = e => e.preventDefault(); /* keep selection */
-  b.onclick = fn;
-  return b;
-}
-function exec(cmd, val){
-  try{ document.execCommand("styleWithCSS", false, true); }catch(e){}
-  document.execCommand(cmd, false, val || null);
-}
 
-/* ================= Colour palette (2D) ================= */
-const HUES = ["#ff9b3d","#ffd54a","#f5e663","#9ee06a","#4dd9c0","#4db8ff","#7a8cff","#c88bff","#ff7ab0","#ff6b5e"];
-function shade(hex, f){
-  const n = parseInt(hex.slice(1),16), r=n>>16, g=(n>>8)&255, b=n&255;
-  const m = x => Math.round(x + (255-x)*f);
-  const d = x => Math.round(x * (1+f));
-  const fn = f >= 0 ? m : x => Math.round(x*(1+f));
-  return "#" + [r,g,b].map(x=>Math.min(255,Math.max(0,fn(x))).toString(16).padStart(2,"0")).join("");
-}
-const palEl = document.getElementById('palette');
-let palCb = null, palRange = null;
-palEl.addEventListener('mousedown', e => e.preventDefault()); /* keep focus & selection in editor */
-function openPalette(anchor, cb){
-  palCb = cb;
-  const sel = window.getSelection();
-  palRange = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
-  palEl.innerHTML = "";
-  [0.35, 0, -0.3].forEach(f => {
-    const r = document.createElement('div'); r.className = "prow";
-    HUES.forEach(h => {
-      const c = shade(h, f);
-      const s = document.createElement('div');
-      s.className = "sw"; s.style.background = c; s.title = c;
-      s.onclick = () => {
-        palEl.style.display = "none";
-        if(palRange){
-          const sel = window.getSelection();
-          sel.removeAllRanges(); sel.addRange(palRange);
-        }
-        palCb && palCb(c);
-      };
-      r.appendChild(s);
-    });
-    palEl.appendChild(r);
+function renderCard(n) {
+  const card = document.createElement("div");
+  card.className = "card";
+  /* formatting bar — hidden until hover / focus */
+  const fmt = document.createElement("div");
+  fmt.className = "fmt";
+  const cmd = (label, title, c, arg) => {
+    const b = document.createElement("button");
+    b.className = "ibtn"; b.innerHTML = label; b.title = title;
+    b.onmousedown = e => e.preventDefault();          // 保留選取範圍
+    b.onclick = () => { document.execCommand(c, false, arg); rt.focus(); n.html = rt.innerHTML; changed(); };
+    return b;
+  };
+  fmt.appendChild(cmd("<b>B</b>", "粗體", "bold"));
+  fmt.appendChild(cmd("<i>I</i>", "斜體", "italic"));
+  fmt.appendChild(cmd("<u>U</u>", "底線", "underline"));
+  fmt.appendChild(cmd("•", "項目符號", "insertUnorderedList"));
+  fmt.appendChild(cmd("⇥", "增加縮排", "indent"));
+  fmt.appendChild(cmd("⇤", "減少縮排", "outdent"));
+  const colorBtn = document.createElement("button");
+  colorBtn.className = "ibtn"; colorBtn.innerHTML = ICONS.color; colorBtn.title = "文字顏色";
+  colorBtn.onmousedown = e => e.preventDefault();
+  colorBtn.onclick = ev => openPalette(ev.currentTarget, c => {
+    document.execCommand("styleWithCSS", false, true);
+    document.execCommand("foreColor", false, c);
+    n.html = rt.innerHTML; changed();
   });
-  const rc = anchor.getBoundingClientRect();
-  palEl.style.left = Math.min(rc.left, window.innerWidth - 240) + window.scrollX + "px";
-  palEl.style.top = rc.bottom + 4 + window.scrollY + "px";
-  palEl.style.display = "block";
-}
-document.addEventListener('mousedown', e => { if(!palEl.contains(e.target)) palEl.style.display = "none"; });
+  fmt.appendChild(colorBtn);
+  card.appendChild(fmt);
 
-/* ================= Settings ================= */
-const selFont = document.getElementById('selFont'),
-      selSize = document.getElementById('selSize'),
-      selIndent = document.getElementById('selIndent');
-function applySettings(){
-  const s = doc.settings;
-  document.documentElement.style.setProperty("--font", s.font);
-  document.documentElement.style.setProperty("--fs", s.size + "px");
-  document.documentElement.style.setProperty("--indent", s.indent + "px");
-  document.documentElement.style.setProperty("--card-border", s.border);
-  selFont.value = s.font; selSize.value = s.size; selIndent.value = s.indent;
+  const rt = document.createElement("div");
+  rt.className = "rt"; rt.contentEditable = "true"; rt.spellcheck = false;
+  rt.innerHTML = n.html || "<ul><li></li></ul>";
+  rt.oninput = () => { n.html = rt.innerHTML; changed(); };
+  card.appendChild(rt);
+  return card;
 }
-selFont.onchange = () => { doc.settings.font = selFont.value; applySettings(); markDirty(); };
-selSize.onchange = () => { doc.settings.size = selSize.value; applySettings(); markDirty(); };
-selIndent.onchange = () => { doc.settings.indent = selIndent.value; applySettings(); markDirty(); };
-document.getElementById('btnBorderColor').onclick = e =>
-  openPalette(e.target, c => { doc.settings.border = c; applySettings(); markDirty(); });
 
-document.getElementById('toggleCtrl').onclick = () =>
-  document.getElementById('controls').classList.toggle('hidden');
+/* ================= 2D colour palette ================= */
+const HUES = ["#ff9a3c","#ffd23f","#7ddc5a","#3fd8c2","#4db3ff","#7b8cff","#c07bff","#ff6f91"];
+const paletteEl = document.getElementById("palette");
+function shade(hex, f) {   // f>1 淡, f<1 深
+  const n = parseInt(hex.slice(1), 16), r = n>>16, g = (n>>8)&255, b = n&255;
+  const m = v => Math.round(Math.min(255, f >= 1 ? v + (255 - v) * (f - 1) : v * f));
+  return `rgb(${m(r)},${m(g)},${m(b)})`;
+}
+let palCb = null;
+function openPalette(anchor, cb) {
+  palCb = cb;
+  paletteEl.innerHTML = "";
+  [1.45, 1.15, 1, 0.75].forEach(f => HUES.forEach(h => {
+    const d = document.createElement("div");
+    d.style.background = shade(h, f);
+    d.onclick = () => { palCb(shade(h, f)); closePalette(); };
+    paletteEl.appendChild(d);
+  }));
+  const r = anchor.getBoundingClientRect();
+  paletteEl.style.left = Math.min(r.left, innerWidth - 190) + "px";
+  paletteEl.style.top = (r.bottom + 4 + 140 > innerHeight ? r.top - 110 : r.bottom + 4) + "px";
+  paletteEl.classList.add("show");
+  setTimeout(() => document.addEventListener("click", outsidePal), 0);
+}
+function outsidePal(e) { if (!paletteEl.contains(e.target)) closePalette(); }
+function closePalette() { paletteEl.classList.remove("show"); document.removeEventListener("click", outsidePal); }
+
+/* ================= settings ================= */
+function applySettings() {
+  const s = state.settings;
+  const rs = document.documentElement.style;
+  rs.setProperty("--font", s.font);
+  rs.setProperty("--fs", s.size + "px");
+  rs.setProperty("--indent", s.indent + "px");
+  rs.setProperty("--line", s.border);
+  rs.setProperty("--cardw", s.width >= 9999 ? "100%" : s.width + "px");
+}
+function syncUIControls() {
+  const s = state.settings;
+  selFont.value = s.font; selSize.value = s.size; selIndent.value = s.indent; selWidth.value = s.width;
+}
+selFont.onchange = () => { state.settings.font = selFont.value; applySettings(); changed(); };
+selSize.onchange = () => { state.settings.size = +selSize.value; applySettings(); changed(); };
+selIndent.onchange = () => { state.settings.indent = +selIndent.value; applySettings(); changed(); };
+selWidth.onchange = () => { state.settings.width = +selWidth.value; applySettings(); changed(); };
+btnBorderColor.onclick = e => openPalette(e.currentTarget, c => { state.settings.border = c; applySettings(); changed(); });
+
+/* app title */
+const titleEl = document.getElementById("appTitle");
+titleEl.oninput = () => { state.appTitle = titleEl.textContent.trim() || "SmartNotes"; };
+titleEl.onblur = () => {
+  const nt = titleEl.textContent.trim() || "SmartNotes";
+  state.appTitle = nt;
+  fileId = nt; localStorage.setItem("sn_fileId", fileId); idb.set("lastFileId", fileId);
+  changed();
+};
+titleEl.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); titleEl.blur(); } };
+
+/* control panel toggle */
+ctlToggle.onclick = () => ctl.classList.toggle("hide");
 
 /* expand / collapse levels */
-document.querySelectorAll('.iconbtn[data-depth]').forEach(b => {
-  b.onclick = () => {
-    const d = parseInt(b.dataset.depth);
-    (function walk(n, depth){
-      n.collapsed = d === 0 ? true : depth >= d;
-      (n.children||[]).forEach(c => walk(c, depth+1));
-    })(doc.tree, 0);
-    if(d === 0) doc.tree.collapsed = true;
-    markDirty(); render();
+document.querySelectorAll("[data-exp]").forEach(b => b.onclick = () => {
+  const lv = +b.dataset.exp;
+  const walk = (n, d) => {
+    n.expanded = lv === 0 ? (n.id === state.tree.id) : d < lv;
+    (n.children || []).forEach(c => walk(c, d + 1));
   };
+  walk(state.tree, 0);
+  if (lv === 0) state.tree.expanded = false;
+  if (lv > 0) state.tree.expanded = true;
+  changed(); renderAll();
 });
 
-/* ================= Persistence: IndexedDB ================= */
-let idb = null;
-function openIDB(){
-  return new Promise(res => {
-    const rq = indexedDB.open("smartnotes", 1);
-    rq.onupgradeneeded = () => rq.result.createObjectStore("kv");
-    rq.onsuccess = () => { idb = rq.result; res(); };
-    rq.onerror = () => res();
-  });
-}
-function idbPut(){
-  if(!idb) return;
-  try{ idb.transaction("kv","readwrite").objectStore("kv").put(JSON.parse(JSON.stringify(doc)), "doc"); }catch(e){}
-}
-function idbGet(){
-  return new Promise(res => {
-    if(!idb) return res(null);
-    const rq = idb.transaction("kv").objectStore("kv").get("doc");
-    rq.onsuccess = () => res(rq.result || null);
-    rq.onerror = () => res(null);
-  });
-}
-
-/* ================= Sync: Supabase ================= */
-const dot = document.getElementById('statusDot');
-function setStatus(s){ dot.className = s === "ok" ? "ok" : s === "err" ? "err" : ""; }
-let saveTimer = null, retryTimer = null;
-function markDirty(){
-  idbPut();
-  setStatus("sync");
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(pushCloud, 1500);
-}
-async function pushCloud(){
-  clearTimeout(retryTimer);
-  try{
-    const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}`, {
-      method: "POST",
-      headers: {
-        apikey: SB_KEY,
-        Authorization: "Bearer " + SB_KEY,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates"
-      },
-      body: JSON.stringify([{ id: DOC_ID, data: doc, updated_at: new Date().toISOString() }])
-    });
-    if(!r.ok) throw new Error(r.status);
-    setStatus("ok");
-  }catch(e){
-    setStatus("err");
-    retryTimer = setTimeout(pushCloud, 5000);
+/* ================= export helpers ================= */
+const ymd = () => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`; };
+const fname = ext => `${state.appTitle} ${ymd()}.${ext}`;
+async function saveBlob(blob, name) {
+  // File System Access API: 可直接選 iCloud Drive 的 SmartNotes 資料夾
+  if (window.showSaveFilePicker) {
+    try {
+      const h = await showSaveFilePicker({ suggestedName: name });
+      const w = await h.createWritable(); await w.write(blob); await w.close(); return;
+    } catch (e) { if (e.name === "AbortError") return; }
   }
-}
-async function pullCloud(){
-  try{
-    const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=eq.${DOC_ID}&select=data`, {
-      headers: { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY }
-    });
-    if(!r.ok) return null;
-    const rows = await r.json();
-    return rows.length && rows[0].data && rows[0].data.tree ? rows[0].data : null;
-  }catch(e){ return null; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-/* ================= Export helpers ================= */
-function ymd(){
-  const d = new Date();
-  return d.getFullYear() + String(d.getMonth()+1).padStart(2,"0") + String(d.getDate()).padStart(2,"0");
-}
-function safeName(s){ return (s || "Untitled").replace(/[\\/:*?"<>|]/g, "_").trim(); }
-function baseName(){ return safeName(doc.tree.title) + " " + ymd(); }
-function download(content, name, mime){
-  const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-}
-function stripHtml(html){
-  const d = document.createElement('div'); d.innerHTML = html || "";
-  return d.textContent.replace(/\s+/g," ").trim();
-}
-function htmlToMd(html){
-  const root = document.createElement('div'); root.innerHTML = html || "";
-  function walk(n, depth){
+/* HTML → Markdown */
+function htmlToMd(html) {
+  const box = document.createElement("div"); box.innerHTML = html || "";
+  const walk = (node, depth) => {
     let out = "";
-    n.childNodes.forEach(c => {
-      if(c.nodeType === 3){ out += c.textContent; return; }
-      const tag = c.tagName ? c.tagName.toLowerCase() : "";
-      if(tag === "b" || tag === "strong") out += "**" + walk(c, depth) + "**";
-      else if(tag === "i" || tag === "em") out += "*" + walk(c, depth) + "*";
-      else if(tag === "ul") out += "\n" + walkList(c, depth);
-      else if(tag === "br") out += "\n";
-      else if(tag === "div" || tag === "p") out += "\n" + walk(c, depth);
+    for (const c of node.childNodes) {
+      if (c.nodeType === 3) { out += c.textContent; continue; }
+      const tag = (c.tagName || "").toLowerCase();
+      if (tag === "b" || tag === "strong") out += "**" + walk(c, depth) + "**";
+      else if (tag === "i" || tag === "em") out += "*" + walk(c, depth) + "*";
+      else if (tag === "ul" || tag === "ol")
+        out += "\n" + [...c.children].map(li => "  ".repeat(depth) + "- " + walk(li, depth + 1).replace(/^\n+|\n+$/g,"")).join("\n") + "\n";
+      else if (tag === "br") out += "\n";
+      else if (tag === "div" || tag === "p") out += "\n" + walk(c, depth) + "\n";
       else out += walk(c, depth);
-    });
+    }
     return out;
-  }
-  function walkList(ul, depth){
-    let out = "";
-    ul.childNodes.forEach(li => {
-      if(!li.tagName || li.tagName.toLowerCase() !== "li") return;
-      let line = "", sub = "";
-      li.childNodes.forEach(c => {
-        if(c.tagName && c.tagName.toLowerCase() === "ul") sub += walkList(c, depth+1);
-        else line += c.nodeType === 3 ? c.textContent : walk(c, depth);
-      });
-      out += "  ".repeat(depth) + "- " + line.trim() + "\n" + sub;
-    });
-    return out;
-  }
-  return walk(root, 0).replace(/\n{3,}/g, "\n\n").trim();
+  };
+  return walk(box, 0).replace(/\n{3,}/g, "\n\n").replace(/[ \t]+\n/g, "\n").trim();
 }
 
-/* JSON */
-document.getElementById('btnExportJson').onclick = () =>
-  download(JSON.stringify(doc, null, 2), baseName() + ".json", "application/json");
-
-/* Import */
-const fileInput = document.getElementById('fileInput');
-document.getElementById('btnImportJson').onclick = () => fileInput.click();
-fileInput.onchange = () => {
-  const f = fileInput.files[0]; if(!f) return;
-  const rd = new FileReader();
-  rd.onload = () => {
-    try{
-      const d = JSON.parse(rd.result);
-      if(!d.tree) throw 0;
-      doc = d;
-      applySettings(); render(); markDirty();
-    }catch(e){ alert("無法讀取:僅接受本應用匯出的 JSON 檔"); }
-    fileInput.value = "";
-  };
-  rd.readAsText(f);
-};
-
-/* Markdown (single file) */
-document.getElementById('btnExportMd').onclick = () => {
-  let out = "";
-  (function walk(n, depth){
-    if(n.type === "folder"){
-      out += "#".repeat(Math.min(depth+1,6)) + " " + n.title + "\n\n";
-      (n.children||[]).forEach(c => walk(c, depth+1));
-    }else{
-      out += "**" + n.title + "**\n\n";
-      const body = htmlToMd(n.content);
-      if(body) out += body + "\n\n";
-      (n.children||[]).forEach(c => walk(c, depth+1));
-    }
-  })(doc.tree, 0);
-  download(out, baseName() + ".md", "text/markdown");
-};
-
-/* HTML */
-document.getElementById('btnExportHtml').onclick = () => {
-  function nodeHtml(n){
-    let h = "<li><span class='t'" + (n.color ? " style='color:" + n.color + "'" : "") + ">" + esc(n.title) + "</span>";
-    if(n.type === "article" && n.content) h += "<div class='card'>" + n.content + "</div>";
-    if((n.children||[]).length) h += "<ul>" + n.children.map(nodeHtml).join("") + "</ul>";
-    return h + "</li>";
+function treeToMd(n, level) {
+  let md = "";
+  if (n.type === "folder") {
+    md += "#".repeat(Math.min(level, 6)) + " " + n.title + "\n\n";
+    (n.children || []).forEach(c => md += treeToMd(c, level + 1));
+  } else {
+    md += "**" + n.title + "**\n\n" + htmlToMd(n.html) + "\n\n";
   }
-  function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
-  const s = doc.settings;
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(doc.tree.title)}</title><style>
-body{background:#14110b;color:#e8e2d0;font-family:${s.font};font-size:${s.size}px;line-height:1.35;padding:16px}
-ul{padding-left:${s.indent}px;list-style:none}
-li::before{content:"•";color:#d4af37;margin-right:5px}
-.t{font-weight:700}
-.card{border:1px solid ${s.border};border-radius:6px;padding:5px 8px;margin:3px 0 5px 14px}
-.card ul{list-style:disc;padding-left:${s.indent}px}.card li::before{content:none}
-</style></head><body><ul>${nodeHtml(doc.tree)}</ul></body></html>`;
-  download(html, baseName() + ".html", "text/html");
+  return md;
+}
+
+function treeToHtml(n) {
+  if (n.type === "folder")
+    return `<li class="f"><span>${esc(n.title)}</span><ul>${(n.children||[]).map(treeToHtml).join("")}</ul></li>`;
+  return `<li class="a"><b>${esc(n.title)}</b><div class="body">${n.html || ""}</div></li>`;
+}
+const esc = s => String(s).replace(/[&<>]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
+
+/* ================= export buttons ================= */
+btnExportJson.onclick = () =>
+  saveBlob(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }), fname("json"));
+
+btnExportMd.onclick = () =>
+  saveBlob(new Blob([treeToMd(state.tree, 1)], { type: "text/markdown" }), fname("md"));
+
+btnExportHtml.onclick = () => {
+  const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(state.appTitle)}</title><style>
+body{background:#0d0e10;color:#e8e4d8;font-family:${state.settings.font};font-size:${state.settings.size}px;padding:20px;max-width:${state.settings.width}px}
+ul{padding-left:${state.settings.indent}px;list-style:none}
+li.f>span{color:${state.settings.border};font-weight:600}
+li.a{border:1px solid ${state.settings.border}88;border-radius:7px;padding:5px 8px;margin:4px 0;background:#141519}
+li.a .body ul{list-style:disc}
+li.a .body li::marker{color:${state.settings.border}}
+</style></head><body><h2 style="color:${state.settings.border}">${esc(state.appTitle)}</h2><ul>${treeToHtml(state.tree)}</ul></body></html>`;
+  saveBlob(new Blob([doc], { type: "text/html" }), fname("html"));
 };
 
 /* OKF bundle */
-document.getElementById('btnExportOkf').onclick = async () => {
+btnExportOkf.onclick = async () => {
   const zip = new JSZip();
-  const ts = new Date().toISOString();
-  (function walk(n, path){
-    if(n.type === "folder"){
-      const p = path + safeName(n.title) + "/";
-      zip.folder(p);
-      (n.children||[]).forEach(c => walk(c, p));
-    }else{
-      const body = htmlToMd(n.content);
-      const desc = stripHtml(n.content).slice(0, 100);
-      const md = `---\ntype: note\ntitle: "${(n.title||"").replace(/"/g,'\\"')}"\ndescription: "${desc.replace(/"/g,'\\"')}"\ntags: []\ntimestamp: ${ts}\n---\n\n${body}\n`;
-      zip.file(path + safeName(n.title) + ".md", md);
-      (n.children||[]).forEach(c => walk(c, path));
+  const safe = s => String(s).replace(/[\\/:*?"<>|]/g, "_").trim() || "untitled";
+  const now = new Date().toISOString();
+  const walk = (n, folder) => {
+    if (n.type === "folder") {
+      const sub = folder.folder(safe(n.title));
+      (n.children || []).forEach(c => walk(c, sub));
+    } else {
+      const body = htmlToMd(n.html);
+      const desc = body.replace(/[#*\-\n]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+      const md = `---\ntype: article\ntitle: "${String(n.title).replace(/"/g,'\\"')}"\ndescription: "${desc.replace(/"/g,'\\"')}"\ntags: []\ntimestamp: ${now}\n---\n\n${body}\n`;
+      folder.file(safe(n.title) + ".md", md);
     }
-  })(doc.tree, "");
+  };
+  walk(state.tree, zip);
   const blob = await zip.generateAsync({ type: "blob" });
-  download(blob, baseName() + " OKF.zip");
+  saveBlob(blob, fname("zip"));
 };
 
-/* Reset */
-document.getElementById('btnReset').onclick = () => {
-  if(confirm("確定清除全部內容並重新開始?")){
-    doc = freshDoc();
-    applySettings(); render(); markDirty();
-  }
+/* import */
+btnImportJson.onclick = () => fileInput.click();
+fileInput.onchange = async () => {
+  const f = fileInput.files[0]; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    if (!j.tree) throw 0;
+    state = j;
+    fileId = state.appTitle || "SmartNotes";
+    localStorage.setItem("sn_fileId", fileId);
+    changed(); renderAll();
+  } catch (e) { alert("僅接受本應用匯出的 JSON 格式"); }
+  fileInput.value = "";
 };
 
-/* ================= Boot ================= */
-(async function init(){
-  await openIDB();
-  const cloud = await pullCloud();
-  if(cloud) { doc = cloud; setStatus("ok"); }
-  else {
-    const local = await idbGet();
-    if(local && local.tree) doc = local;
+/* reset */
+btnReset.onclick = () => {
+  if (!confirm("清除全部內容並重新開始?")) return;
+  state = defaultState();
+  changed(); renderAll();
+};
+
+/* ================= cloud file list ================= */
+btnFiles.onclick = async () => {
+  const modal = document.getElementById("modal");
+  modal.innerHTML = "<h3>☁ Supabase 檔案</h3><div class='clabel'>載入中…</div>";
+  modalBg.classList.add("show");
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?select=id,updated_at&order=updated_at.desc`, { headers: sbH });
+    if (!r.ok) throw new Error(await r.text());
+    const rows = await r.json();
+    modal.innerHTML = "<h3>☁ Supabase 檔案</h3>";
+    if (!rows.length) modal.innerHTML += "<div class='clabel'>雲端尚無檔案</div>";
+    rows.forEach(row => {
+      const d = document.createElement("div");
+      d.className = "fitem";
+      d.innerHTML = `<span>${esc(row.id)}</span><small>${new Date(row.updated_at).toLocaleString("zh-TW")}</small>`;
+      d.onclick = async () => {
+        const q = await fetch(`${SB_URL}/rest/v1/${SB_TABLE}?id=eq.${encodeURIComponent(row.id)}&select=data`, { headers: sbH });
+        const rows2 = await q.json();
+        if (rows2.length) {
+          state = rows2[0].data; fileId = row.id;
+          localStorage.setItem("sn_fileId", fileId); idb.set("lastFileId", fileId);
+          idb.set("state:" + fileId, JSON.parse(JSON.stringify(state)));
+          setDot("ok"); renderAll();
+        }
+        modalBg.classList.remove("show");
+      };
+      modal.appendChild(d);
+    });
+    const close = document.createElement("button");
+    close.className = "cbtn"; close.textContent = "關閉";
+    close.onclick = () => modalBg.classList.remove("show");
+    modal.appendChild(close);
+  } catch (e) {
+    modal.innerHTML = "<h3>☁ Supabase 檔案</h3><div class='clabel'>連線失敗。請確認已在 Supabase 建立資料表 smartnotes (id text primary key, data jsonb, updated_at timestamptz)。</div><button class='cbtn' onclick=\"modalBg.classList.remove('show')\">關閉</button>";
   }
-  applySettings();
-  render();
-})();
+};
+modalBg.onclick = e => { if (e.target === modalBg) modalBg.classList.remove("show"); };
+
+/* ================= boot ================= */
+loadInitial();
 </script>
 </body>
 </html>
